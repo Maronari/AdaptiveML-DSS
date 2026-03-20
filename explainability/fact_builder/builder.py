@@ -12,6 +12,7 @@ def build_facts(
     confidence: float | None,
     top_factors: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Convert ML output and explanation factors into DSS facts."""
     prediction_token = str(prediction).strip().lower()
     score = confidence if confidence is not None else 0.5
 

@@ -50,9 +50,11 @@ if EXPERTA_AVAILABLE:
 
 class DecisionEngine:
     def __init__(self) -> None:
+        """Prepare the rule engine or a fallback selector if Experta is unavailable."""
         self.engine = AdaptiveDecisionKnowledgeEngine() if EXPERTA_AVAILABLE else None
 
     def recommend(self, facts: dict) -> dict:
+        """Choose a scenario and format the final recommendation payload."""
         if self.engine is not None:
             self.engine.reset()
             self.engine.selected_rule = DEFAULT_RULES[-1]

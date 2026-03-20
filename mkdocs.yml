@@ -1,0 +1,36 @@
+site_name: AdaptiveML DSS Docs
+site_description: Documentation for the AdaptiveML DSS backend, ML pipeline, DSS flow and tooling.
+site_url: https://maronari.github.io/AdaptiveML-DSS/
+repo_name: Maronari/AdaptiveML-DSS
+repo_url: https://github.com/Maronari/AdaptiveML-DSS
+
+theme:
+  name: material
+  language: ru
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Setup: setup.md
+  - Architecture: architecture.md
+  - API: api.md
+  - CLI & Tooling: cli.md
+  - Visualization: visualization.md
+  - Implementation Overview: implementation-overview.md

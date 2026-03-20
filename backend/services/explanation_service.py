@@ -11,11 +11,13 @@ from explainability.shap_service.service import try_shap_explanations
 
 class ExplanationService:
     def __init__(self) -> None:
+        """Build local explanations for champion-model predictions."""
         self.dataset_service = DatasetService()
         self.prediction_service = PredictionService()
         self.registry_service = RegistryService()
 
     def explain(self, project_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+        """Explain predictions for inline records using the champion model."""
         champion, bundle = self.registry_service.get_champion_bundle(project_id)
         frame = dataframe_from_records(records)
         predictions = self.prediction_service.predict_with_bundle(bundle=bundle, frame=frame)
@@ -33,6 +35,7 @@ class ExplanationService:
         frame,
         predictions: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """Explain predictions using a preloaded bundle and prepared inference rows."""
         preprocessor = bundle.get("preprocessor")
         prepared = preprocessor.transform(frame) if preprocessor is not None else frame
         aligned = self.dataset_service.validate_prediction_frame(prepared, bundle["feature_names"])
@@ -86,6 +89,7 @@ class ExplanationService:
         importance: float,
         baseline_profile: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
+        """Convert a raw feature contribution into a user-facing factor payload."""
         numeric_baselines = baseline_profile["numeric"]
         categorical_baselines = baseline_profile["categorical"]
 

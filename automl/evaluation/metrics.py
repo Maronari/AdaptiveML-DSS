@@ -13,6 +13,7 @@ from sklearn.metrics import (
 
 
 def evaluate_predictions(task_type: str, y_true, y_pred) -> dict[str, float]:
+    """Compute task-specific evaluation metrics with rounded values."""
     if task_type == "regression":
         rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
         mae = float(mean_absolute_error(y_true, y_pred))
@@ -32,10 +33,12 @@ def evaluate_predictions(task_type: str, y_true, y_pred) -> dict[str, float]:
 
 
 def primary_metric_name(task_type: str) -> str:
+    """Return the metric used for model promotion decisions."""
     return "rmse" if task_type == "regression" else "f1_weighted"
 
 
 def scoring_function(task_type: str) -> Callable:
+    """Build a scorer compatible with permutation-based importance estimation."""
     def score(model, x_reference, y_reference) -> float:
         predictions = model.predict(x_reference)
         metrics = evaluate_predictions(task_type=task_type, y_true=y_reference, y_pred=predictions)

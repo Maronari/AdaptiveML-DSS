@@ -32,6 +32,7 @@ except Exception:
 
 @dataclass(slots=True)
 class TrainingResult:
+    """Normalized training output returned by any backend path."""
     task_type: str
     feature_names: list[str]
     metrics: dict[str, float]
@@ -41,9 +42,11 @@ class TrainingResult:
 
 class TabularAutoMLAdapter:
     def __init__(self) -> None:
+        """Create a training adapter with project-wide settings."""
         self.settings = get_settings()
 
     def train(self, frame: pd.DataFrame, target: str) -> TrainingResult:
+        """Train with LightAutoML first and fallback to sklearn on failure."""
         if LIGHTAUTOML_AVAILABLE:
             try:
                 return self._train_with_lightautoml(frame=frame, target=target)
@@ -52,6 +55,7 @@ class TabularAutoMLAdapter:
         return self._train_with_sklearn(frame=frame, target=target)
 
     def _train_with_lightautoml(self, frame: pd.DataFrame, target: str) -> TrainingResult:
+        """Train a real LightAutoML model and build a reusable bundle."""
         preprocessor = TabularPreprocessor()
         prepared = preprocessor.fit_transform(frame, target=target)
         task_type = DatasetService.infer_task_type(frame[target])
@@ -122,6 +126,7 @@ class TabularAutoMLAdapter:
         )
 
     def _train_with_sklearn(self, frame: pd.DataFrame, target: str) -> TrainingResult:
+        """Train the sklearn fallback path with the same external contract."""
         tabular_preprocessor = TabularPreprocessor()
         prepared = tabular_preprocessor.fit_transform(frame, target=target)
         task_type = DatasetService.infer_task_type(frame[target])
@@ -226,6 +231,7 @@ class TabularAutoMLAdapter:
         y_reference: pd.Series,
         feature_names: list[str],
     ) -> dict[str, float]:
+        """Estimate fallback feature importance via permutation scoring."""
         scorer = scoring_function(task_type)
         baseline_score = scorer(model, x_reference, y_reference)
         lower_is_better = primary_metric_name(task_type) == "rmse"
@@ -255,6 +261,7 @@ class TabularAutoMLAdapter:
         numeric_features: list[str],
         categorical_features: list[str],
     ) -> dict[str, dict[str, Any]]:
+        """Build numeric means and categorical modes for factor descriptions."""
         numeric = {feature: float(frame[feature].mean()) for feature in numeric_features}
         categorical = {}
         for feature in categorical_features:
@@ -264,6 +271,7 @@ class TabularAutoMLAdapter:
 
     @staticmethod
     def _class_mapping(target: pd.Series) -> dict[str, int] | None:
+        """Return a deterministic label-to-index mapping for classification."""
         if target.nunique(dropna=True) < 2:
             return None
         unique = sorted(target.dropna().unique().tolist(), key=lambda value: str(value))
@@ -271,6 +279,7 @@ class TabularAutoMLAdapter:
 
     @staticmethod
     def _decode_lightautoml_predictions(automl, task_type: str, raw_predictions):
+        """Decode raw LightAutoML outputs into plain predictions and labels."""
         data = np.asarray(raw_predictions)
         if task_type == "regression":
             return data.reshape(-1), None
@@ -295,6 +304,7 @@ class TabularAutoMLAdapter:
 
     @staticmethod
     def _lightautoml_feature_importances(automl, feature_names: list[str]) -> dict[str, float]:
+        """Extract normalized feature importances from LightAutoML when available."""
         try:
             scores = automl.get_feature_scores()
         except Exception:
@@ -321,6 +331,7 @@ class TabularAutoMLAdapter:
 
     @staticmethod
     def _lightautoml_cv_folds(target: pd.Series, task_type: str) -> int:
+        """Choose a safe CV value for LightAutoML on small datasets."""
         if task_type == "regression":
             return max(2, min(5, len(target)))
 

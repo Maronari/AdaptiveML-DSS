@@ -15,6 +15,7 @@ except Exception:
 
 
 def try_shap_explanations(bundle: dict, frame):
+    """Build row-level SHAP explanations when the environment supports it."""
     if not SHAP_AVAILABLE:
         return None
 
@@ -73,10 +74,12 @@ def try_shap_explanations(bundle: dict, frame):
 
 
 def _predict_fn(bundle: dict, task_type: str, columns: list[str]):
+    """Create a SHAP-compatible prediction callable over model bundle outputs."""
     model = bundle["pipeline"]
     backend_name = bundle.get("backend_name", "sklearn-fallback")
 
     def predict(data):
+        """Predict on a raw matrix provided by SHAP."""
         frame = pd.DataFrame(data, columns=columns)
         if backend_name == "lightautoml":
             output = np.asarray(model.predict(frame).data)
@@ -97,6 +100,7 @@ def _predict_fn(bundle: dict, task_type: str, columns: list[str]):
 
 
 def _strength(score: float) -> str:
+    """Map a numeric contribution magnitude to a human-readable label."""
     if score >= 0.66:
         return "strong"
     if score >= 0.33:

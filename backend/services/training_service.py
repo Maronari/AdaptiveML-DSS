@@ -12,6 +12,7 @@ from backend.utils.io import dataframe_from_records
 
 class TrainingService:
     def __init__(self) -> None:
+        """Wire dataset validation, registry access and the ML adapter."""
         self.dataset_service = DatasetService()
         self.registry_service = RegistryService()
         self.adapter = TabularAutoMLAdapter()
@@ -23,6 +24,7 @@ class TrainingService:
         records: list[dict[str, Any]],
         source_name: str = "inline",
     ) -> dict[str, Any]:
+        """Train a model from inline records and register the result."""
         frame = dataframe_from_records(records)
         self.dataset_service._validate_training_frame(frame, target)
 
@@ -58,6 +60,7 @@ class TrainingService:
         target: str,
         upload: UploadFile,
     ) -> dict[str, Any]:
+        """Train a model from an uploaded CSV or Excel file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
         records = frame.to_dict(orient="records")
         source_name = upload.filename or "uploaded.csv"

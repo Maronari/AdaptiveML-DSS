@@ -11,6 +11,7 @@ from explainability.fact_builder.builder import build_facts
 
 class DecisionService:
     def __init__(self) -> None:
+        """Combine predictions and explanations into DSS recommendations."""
         self.dataset_service = DatasetService()
         self.prediction_service = PredictionService()
         self.explanation_service = ExplanationService()
@@ -18,6 +19,7 @@ class DecisionService:
         self.engine = DecisionEngine()
 
     def evaluate(self, project_id: str, records: list[dict]) -> dict:
+        """Run the full decision pipeline for inline records."""
         champion, bundle = self.registry_service.get_champion_bundle(project_id)
         frame = dataframe_from_records(records)
         predictions = self.prediction_service.predict_with_bundle(bundle=bundle, frame=frame)

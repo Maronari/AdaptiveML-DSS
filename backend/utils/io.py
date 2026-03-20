@@ -9,12 +9,14 @@ import pandas as pd
 
 
 def dataframe_from_records(records: list[dict[str, Any]]) -> pd.DataFrame:
+    """Convert API-style records into a DataFrame."""
     if not records:
         raise ValueError("At least one record is required.")
     return pd.DataFrame.from_records(records)
 
 
 def pythonize(value: Any) -> Any:
+    """Convert numpy/pandas scalar values into plain Python types."""
     if isinstance(value, (np.integer,)):
         return int(value)
     if isinstance(value, (np.floating,)):
@@ -27,6 +29,7 @@ def pythonize(value: Any) -> Any:
 
 
 def read_json(path: Path) -> list[dict[str, Any]]:
+    """Read a JSON list from disk, returning an empty list when absent."""
     if not path.exists():
         return []
     with path.open("r", encoding="utf-8") as handle:
@@ -34,6 +37,7 @@ def read_json(path: Path) -> list[dict[str, Any]]:
 
 
 def write_json(path: Path, payload: list[dict[str, Any]]) -> None:
+    """Write a JSON list to disk, creating parent directories when needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=True, indent=2)

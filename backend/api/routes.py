@@ -24,16 +24,19 @@ decision_service = DecisionService()
 
 
 def _bad_request(exc: Exception) -> HTTPException:
+    """Convert domain validation errors into HTTP 400 responses."""
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("/health", tags=["system"])
 def healthcheck() -> dict[str, str]:
+    """Return a minimal liveness response for health checks."""
     return {"status": "ok"}
 
 
 @router.post("/datasets/validate", tags=["datasets"])
 def validate_dataset(payload: DatasetValidationRequest) -> dict[str, Any]:
+    """Validate an inline dataset payload."""
     try:
         return dataset_service.validate_inline_dataset(
             project_id=payload.project_id,
@@ -50,6 +53,7 @@ async def validate_dataset_file(
     target: str = Form(...),
     project_id: str = Form("default"),
 ) -> dict[str, Any]:
+    """Validate an uploaded dataset file."""
     try:
         return await dataset_service.validate_uploaded_dataset(
             project_id=project_id,
@@ -62,6 +66,7 @@ async def validate_dataset_file(
 
 @router.post("/training/run", tags=["training"])
 def run_training(payload: TrainRequest) -> dict[str, Any]:
+    """Train a model from inline records."""
     try:
         return training_service.train(
             project_id=payload.project_id,
@@ -79,6 +84,7 @@ async def run_training_file(
     target: str = Form(...),
     project_id: str = Form("default"),
 ) -> dict[str, Any]:
+    """Train a model from an uploaded dataset file."""
     try:
         return await training_service.train_from_upload(
             project_id=project_id,
@@ -91,6 +97,7 @@ async def run_training_file(
 
 @router.post("/predictions/run", tags=["prediction"])
 def run_prediction(payload: PredictionRequest) -> dict[str, Any]:
+    """Run prediction for inline records."""
     try:
         return prediction_service.predict(
             project_id=payload.project_id,
@@ -105,6 +112,7 @@ async def run_prediction_file(
     file: UploadFile = File(...),
     project_id: str = Form("default"),
 ) -> dict[str, Any]:
+    """Run prediction for an uploaded dataset file."""
     try:
         return await prediction_service.predict_from_upload(
             project_id=project_id,
@@ -116,6 +124,7 @@ async def run_prediction_file(
 
 @router.post("/explanations/run", tags=["explanation"])
 def run_explanation(payload: PredictionRequest) -> dict[str, Any]:
+    """Build explanations for inline inference records."""
     try:
         return explanation_service.explain(
             project_id=payload.project_id,
@@ -127,6 +136,7 @@ def run_explanation(payload: PredictionRequest) -> dict[str, Any]:
 
 @router.post("/decision/run", tags=["decision"])
 def run_decision(payload: DecisionRequest) -> dict[str, Any]:
+    """Run the full DSS path for inline inference records."""
     try:
         return decision_service.evaluate(
             project_id=payload.project_id,

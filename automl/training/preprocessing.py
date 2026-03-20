@@ -9,10 +9,12 @@ import pandas as pd
 
 @dataclass(slots=True)
 class TabularPreprocessor:
+    """Convert raw tabular columns into model-friendly engineered features."""
     datetime_columns: list[str] = field(default_factory=list)
     time_columns: list[str] = field(default_factory=list)
 
     def fit(self, frame: pd.DataFrame, target: str | None = None) -> "TabularPreprocessor":
+        """Detect datetime-like and time-only columns on the training frame."""
         self.datetime_columns = []
         self.time_columns = []
 
@@ -30,10 +32,12 @@ class TabularPreprocessor:
         return self
 
     def fit_transform(self, frame: pd.DataFrame, target: str | None = None) -> pd.DataFrame:
+        """Fit the preprocessor and immediately transform the same frame."""
         self.fit(frame, target=target)
         return self.transform(frame, target=target)
 
     def transform(self, frame: pd.DataFrame, target: str | None = None) -> pd.DataFrame:
+        """Apply learned datetime and time projections to a new frame."""
         transformed = frame.copy()
 
         for column in list(self.datetime_columns):
@@ -56,6 +60,7 @@ class TabularPreprocessor:
 
     @staticmethod
     def _is_time_only(series: pd.Series) -> bool:
+        """Detect columns that look like time-of-day values."""
         non_null = series.dropna()
         if non_null.empty:
             return False
@@ -76,6 +81,7 @@ class TabularPreprocessor:
 
     @staticmethod
     def _is_datetime_like(series: pd.Series) -> bool:
+        """Detect columns that should be interpreted as datetimes."""
         if pd.api.types.is_datetime64_any_dtype(series):
             return True
 
@@ -93,6 +99,7 @@ class TabularPreprocessor:
 
     @staticmethod
     def _to_minutes(value: Any) -> float | None:
+        """Convert a time-like value into minutes from midnight."""
         if value is None or pd.isna(value):
             return None
 

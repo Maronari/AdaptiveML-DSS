@@ -20,6 +20,7 @@ from backend.services.dataset_service import DatasetService
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the end-to-end API smoke check."""
     parser = argparse.ArgumentParser(
         description="Run an end-to-end API smoke check: train -> predict -> explain -> decision."
     )
@@ -51,6 +52,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def json_ready(value):
+    """Convert pandas and numpy values into JSON-safe Python objects."""
     if isinstance(value, pd.Timestamp):
         return value.isoformat(sep=" ")
     if pd.isna(value):
@@ -65,11 +67,13 @@ def json_ready(value):
 
 
 def records_to_json_ready(frame) -> list[dict]:
+    """Convert a DataFrame to a JSON-ready record list."""
     records = frame.to_dict(orient="records")
     return [{key: json_ready(value) for key, value in record.items()} for record in records]
 
 
 def ensure_ok(response: httpx.Response, step: str) -> dict:
+    """Validate an HTTP response and return its JSON payload."""
     try:
         payload = response.json()
     except Exception as exc:
@@ -82,6 +86,7 @@ def ensure_ok(response: httpx.Response, step: str) -> dict:
 
 
 def validate_summary(training: dict, prediction: dict, explanation: dict, decision: dict, sample_size: int) -> None:
+    """Assert that the smoke-check responses have the expected structure."""
     if "model_version" not in training or "backend" not in training:
         raise SystemExit("Training response is missing expected fields.")
     if len(prediction.get("predictions", [])) != sample_size:
@@ -93,6 +98,7 @@ def validate_summary(training: dict, prediction: dict, explanation: dict, decisi
 
 
 def main() -> int:
+    """Run train, predict, explain and decision requests against a live API."""
     args = parse_args()
     data_path = Path(args.data).expanduser().resolve()
     if not data_path.exists():

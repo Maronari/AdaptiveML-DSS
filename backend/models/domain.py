@@ -4,6 +4,7 @@ from typing import Any
 
 @dataclass(slots=True)
 class DatasetVersion:
+    """Metadata describing one persisted dataset snapshot."""
     version_id: str
     project_id: str
     source_name: str
@@ -14,11 +15,13 @@ class DatasetVersion:
     created_at: str
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the dataclass into a plain dictionary."""
         return asdict(self)
 
 
 @dataclass(slots=True)
 class ModelVersion:
+    """Metadata describing one trained model artifact."""
     version_id: str
     project_id: str
     dataset_version_id: str
@@ -32,4 +35,5 @@ class ModelVersion:
     created_at: str
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the dataclass into a plain dictionary."""
         return asdict(self)

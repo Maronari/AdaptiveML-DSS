@@ -29,6 +29,7 @@ from automl.training.preprocessing import TabularPreprocessor
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for direct LightAutoML training."""
     parser = argparse.ArgumentParser(
         description="Run LightAutoML directly on a CSV or Excel dataset."
     )
@@ -88,12 +89,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def task_name_to_lama(task_name: str) -> Task:
+    """Map the project task name to a LightAutoML Task."""
     if task_name == "regression":
         return Task("reg")
     return Task(task_name)
 
 
 def auto_cv_folds(target: pd.Series, task_type: str) -> int:
+    """Pick a safe CV value for small training datasets."""
     if task_type == "regression":
         return max(2, min(5, len(target)))
 
@@ -104,6 +107,7 @@ def auto_cv_folds(target: pd.Series, task_type: str) -> int:
 
 
 def decode_predictions(task_type: str, raw_output, class_mapping: dict | None):
+    """Convert raw LightAutoML predictions into labels and confidences."""
     import numpy as np
 
     data = np.asarray(raw_output)
@@ -132,6 +136,7 @@ def decode_predictions(task_type: str, raw_output, class_mapping: dict | None):
 
 
 def feature_scores_payload(automl: TabularAutoML, top_n: int) -> list[dict]:
+    """Extract the top feature importances for CLI output."""
     try:
         scores = automl.get_feature_scores()
     except Exception:
@@ -150,6 +155,7 @@ def feature_scores_payload(automl: TabularAutoML, top_n: int) -> list[dict]:
 
 
 def main() -> int:
+    """Train LightAutoML on a local dataset and print a JSON summary."""
     args = parse_args()
     data_path = Path(args.data).expanduser().resolve()
     if not data_path.exists():

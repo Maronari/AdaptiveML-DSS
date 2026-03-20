@@ -11,10 +11,12 @@ from backend.utils.io import dataframe_from_records, pythonize
 
 class PredictionService:
     def __init__(self) -> None:
+        """Provide champion-model inference for API and internal callers."""
         self.dataset_service = DatasetService()
         self.registry_service = RegistryService()
 
     def predict(self, project_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+        """Run prediction for inline records using the current champion model."""
         champion, bundle = self.registry_service.get_champion_bundle(project_id)
         frame = dataframe_from_records(records)
         predictions = self.predict_with_bundle(bundle=bundle, frame=frame)
@@ -26,10 +28,12 @@ class PredictionService:
         }
 
     async def predict_from_upload(self, project_id: str, upload: UploadFile) -> dict[str, Any]:
+        """Run prediction for an uploaded CSV or Excel file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
         return self.predict(project_id=project_id, records=frame.to_dict(orient="records"))
 
     def predict_with_bundle(self, bundle: dict[str, Any], frame) -> list[dict[str, Any]]:
+        """Predict from a preloaded model bundle and a raw DataFrame."""
         preprocessor = bundle.get("preprocessor")
         prepared = preprocessor.transform(frame) if preprocessor is not None else frame
         aligned = self.dataset_service.validate_prediction_frame(prepared, bundle["feature_names"])
@@ -47,6 +51,7 @@ class PredictionService:
         return output
 
     def _predict_outputs(self, bundle: dict[str, Any], frame):
+        """Dispatch inference to LightAutoML or sklearn-compatible models."""
         model = bundle["pipeline"]
         task_type = bundle["task_type"]
         backend_name = bundle.get("backend_name", "sklearn-fallback")
@@ -65,6 +70,7 @@ class PredictionService:
 
     @staticmethod
     def _predict_confidence(model, frame):
+        """Return max class probability when the model exposes predict_proba."""
         if hasattr(model, "predict_proba"):
             probabilities = model.predict_proba(frame)
             return probabilities.max(axis=1)
@@ -72,6 +78,7 @@ class PredictionService:
 
     @staticmethod
     def _decode_lightautoml_output(task_type: str, raw_output, class_mapping: dict[str, int] | None):
+        """Convert raw LightAutoML output into labels and confidences."""
         import numpy as np
 
         data = np.asarray(raw_output)

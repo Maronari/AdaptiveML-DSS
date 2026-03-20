@@ -40,3 +40,28 @@ python -m pip install --no-deps "LightAutoML==0.4.1"
 - rule-based fallback вместо жёсткой `Experta`-зависимости.
 
 API при этом уже собран так, чтобы заменить внутренние адаптеры без смены внешнего контракта.
+
+## Документация
+
+Для unified docs-site добавлены:
+
+- `mkdocs.yml`
+- `requirements-docs.txt`
+
+Установка зависимостей для документации:
+
+```bash
+python -m pip install -r requirements-docs.txt
+```
+
+Локальный запуск:
+
+```bash
+mkdocs serve
+```
+
+Сборка статической версии:
+
+```bash
+mkdocs build
+```

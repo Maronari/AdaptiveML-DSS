@@ -16,6 +16,7 @@ from storage.registry.filesystem import FilesystemRegistry
 
 class RegistryService:
     def __init__(self) -> None:
+        """Manage dataset and model versions in the filesystem registry."""
         self.settings = get_settings()
         self.registry = FilesystemRegistry(self.settings.registry_dir)
 
@@ -26,6 +27,7 @@ class RegistryService:
         target: str,
         frame: pd.DataFrame,
     ) -> DatasetVersion:
+        """Persist a new dataset snapshot and register its metadata."""
         version_id = self._new_version_id("dataset")
         project_dir = self.settings.datasets_dir / project_id
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -58,6 +60,7 @@ class RegistryService:
         metrics: dict[str, float],
         bundle: dict[str, Any],
     ) -> ModelVersion:
+        """Persist a trained model bundle and update champion status."""
         models = self.registry.read("models")
         version_id = self._new_version_id("model")
         artifact_dir = self.settings.artifacts_dir / project_id / version_id
@@ -93,6 +96,7 @@ class RegistryService:
         return record
 
     def get_champion_bundle(self, project_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Load the current champion model metadata and serialized bundle."""
         models = self.registry.read("models")
         champion = self._find_champion(models, project_id)
         if champion is None:
@@ -103,6 +107,7 @@ class RegistryService:
 
     @staticmethod
     def _primary_metric(task_type: str) -> str:
+        """Choose the metric that decides champion promotion."""
         return "rmse" if task_type == "regression" else "f1_weighted"
 
     @staticmethod
@@ -111,6 +116,7 @@ class RegistryService:
         champion_metrics: dict[str, float],
         primary_metric: str,
     ) -> bool:
+        """Compare candidate and champion using the chosen primary metric."""
         candidate = float(candidate_metrics[primary_metric])
         champion = float(champion_metrics[primary_metric])
 
@@ -120,6 +126,7 @@ class RegistryService:
 
     @staticmethod
     def _find_champion(models: list[dict[str, Any]], project_id: str) -> dict[str, Any] | None:
+        """Return the active champion model record for a project."""
         for model in models:
             if model["project_id"] == project_id and model["status"] == "champion":
                 return model
@@ -127,8 +134,10 @@ class RegistryService:
 
     @staticmethod
     def _new_version_id(prefix: str) -> str:
+        """Create a short version identifier with a stable prefix."""
         return f"{prefix}-{uuid4().hex[:12]}"
 
     @staticmethod
     def _now() -> str:
+        """Return the current UTC timestamp in ISO format."""
         return datetime.now(UTC).isoformat()

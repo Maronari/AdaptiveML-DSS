@@ -236,6 +236,28 @@ SHAP определяет:
   uvicorn backend.main:app --reload
 ```
 
+## Документация
+
+Полная документация теперь собрана как docs-site на `MkDocs`.
+
+Основные файлы:
+
+- `mkdocs.yml` — конфигурация сайта документации
+- `docs/index.md` — входная точка
+- `docs/setup.md` — установка и окружение
+- `docs/architecture.md` — backend, ML, DSS, registry
+- `docs/api.md` — API endpoints
+- `docs/cli.md` — CLI и smoke-утилиты
+- `docs/visualization.md` — HTML-репорт и визуальный слой
+- `docs/implementation-overview.md` — полная техническая сводка
+
+Локальный запуск:
+
+```bash
+python -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
 ## Структура проекта
 
 ```text

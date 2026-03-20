@@ -38,6 +38,7 @@ patch_numpy_for_lightautoml()
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for local HTML report generation."""
     parser = argparse.ArgumentParser(
         description="Generate an HTML report with charts for a trained project."
     )
@@ -57,6 +58,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def figure_to_data_uri(fig) -> str:
+    """Serialize a matplotlib figure into an embeddable data URI."""
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", bbox_inches="tight", dpi=150)
     plt.close(fig)
@@ -65,6 +67,7 @@ def figure_to_data_uri(fig) -> str:
 
 
 def render_metric_cards(metrics: dict[str, Any]) -> str:
+    """Render metric cards for the HTML report header."""
     cards = []
     for name, value in metrics.items():
         cards.append(
@@ -82,6 +85,7 @@ def render_metric_cards(metrics: dict[str, Any]) -> str:
 
 
 def render_top_factors(items: list[dict[str, Any]]) -> str:
+    """Render explanation samples as HTML blocks."""
     blocks = []
     for item in items:
         factors = item.get("top_factors", [])
@@ -123,6 +127,7 @@ def render_top_factors(items: list[dict[str, Any]]) -> str:
 
 
 def render_recommendations(items: list[dict[str, Any]]) -> str:
+    """Render DSS recommendation samples as HTML blocks."""
     blocks = []
     for item in items:
         recommendation = item.get("recommendation", {})
@@ -154,6 +159,7 @@ def render_recommendations(items: list[dict[str, Any]]) -> str:
 
 
 def plot_target_distribution(frame: pd.DataFrame, target: str, task_type: str) -> str:
+    """Build a target-distribution chart and return it as a data URI."""
     fig, ax = plt.subplots(figsize=(8, 4.5))
     series = frame[target]
 
@@ -173,6 +179,7 @@ def plot_target_distribution(frame: pd.DataFrame, target: str, task_type: str) -
 
 
 def plot_feature_importances(bundle: dict[str, Any]) -> str:
+    """Build the feature-importance chart for the report."""
     importances = bundle.get("feature_importances", {})
     ordered = sorted(importances.items(), key=lambda item: float(item[1]), reverse=True)[:12]
 
@@ -191,6 +198,7 @@ def plot_feature_importances(bundle: dict[str, Any]) -> str:
 
 
 def plot_predictions(sample_frame: pd.DataFrame, predictions: list[dict[str, Any]], target: str, task_type: str) -> str:
+    """Build a chart that compares actual and predicted values."""
     predicted = [pythonize(item["prediction"]) for item in predictions]
     actual = sample_frame[target].tolist()
 
@@ -220,6 +228,7 @@ def plot_predictions(sample_frame: pd.DataFrame, predictions: list[dict[str, Any
 
 
 def plot_first_explanation(explanations: dict[str, Any]) -> str:
+    """Build a chart for the first explanation payload in the sample."""
     items = explanations.get("items", [])
     factors = items[0].get("top_factors", []) if items else []
 
@@ -239,6 +248,7 @@ def plot_first_explanation(explanations: dict[str, Any]) -> str:
 
 
 def load_project_context(project_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], pd.DataFrame]:
+    """Load the champion model, dataset record and source frame for a project."""
     registry_service = RegistryService()
     champion, bundle = registry_service.get_champion_bundle(project_id)
     datasets = registry_service.registry.read("datasets")
@@ -256,6 +266,7 @@ def load_project_context(project_id: str) -> tuple[dict[str, Any], dict[str, Any
 
 
 def main() -> int:
+    """Generate an HTML report with charts for the current champion model."""
     args = parse_args()
     champion, bundle, dataset_record, frame = load_project_context(args.project_id)
     target = champion["target"]

@@ -7,6 +7,7 @@ import numpy as np
 
 
 def patch_numpy_for_lightautoml() -> None:
+    """Restore numpy APIs expected by LightAutoML on NumPy 2.x."""
     if hasattr(np, "find_common_type"):
         return
 
@@ -22,6 +23,7 @@ def patch_numpy_for_lightautoml() -> None:
 
 
 def patch_collections_for_experta() -> None:
+    """Restore collections aliases expected by Experta on modern Python."""
     for name in ("Mapping", "MutableMapping", "Sequence"):
         if not hasattr(collections, name):
             setattr(collections, name, getattr(collections.abc, name))
