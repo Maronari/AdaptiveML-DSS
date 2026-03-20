@@ -1,0 +1,45 @@
+services:
+  api:
+    image: python:3.13-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: >
+      bash -lc "bash scripts/setup_full_env.sh python3.13 &&
+      uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      ADAPTIVEML_STORAGE_ROOT: /app/storage
+      POSTGRES_HOST: postgres
+      MINIO_ENDPOINT: minio:9000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - minio
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: adaptiveml
+      POSTGRES_USER: adaptiveml
+      POSTGRES_PASSWORD: adaptiveml
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  postgres_data:
+  minio_data:
