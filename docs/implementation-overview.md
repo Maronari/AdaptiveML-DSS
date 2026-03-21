@@ -1,10 +1,10 @@
-# Implementation Overview
+# Обзор реализации
 
 Этот документ фиксирует, что именно было реализовано в текущей итерации проекта, как это устроено и как этим пользоваться.
 
 ## Что уже работает
 
-Проект собран в рабочий end-to-end контур:
+Проект собран в рабочий сквозной контур:
 
 `dataset -> training -> model registry -> prediction -> explanation -> decision -> visualization`
 
@@ -15,38 +15,42 @@
 - обучать модель через `LightAutoML`;
 - использовать `sklearn` fallback, если реальный `LightAutoML` недоступен;
 - делать предсказания на новых данных;
+- показывать минимальный веб-интерфейс на `/app/`;
+- сравнивать `actual` и `predicted` на загруженном датасете;
+- строить краткосрочный прогноз по временным данным;
+- запускать контролируемое переобучение по новым размеченным данным;
 - строить локальные объяснения через `SHAP`;
 - формировать рекомендации через `Experta`;
-- хранить версии датасетов и моделей в файловом registry;
+- хранить версии датасетов и моделей в файловом реестре;
 - запускаться через API, CLI и smoke-скрипты;
 - генерировать HTML-отчёт с визуализацией.
 
 ## Архитектура
 
-### Backend
+### Бэкенд
 
 Основной backend построен на `FastAPI`.
 
 Ключевые файлы:
 
 - `backend/main.py` — точка входа приложения;
-- `backend/api/routes.py` — HTTP endpoints;
+- `backend/api/routes.py` — HTTP-эндпоинты;
 - `backend/services/*` — прикладная логика;
-- `backend/models/domain.py` — доменные сущности для registry;
+- `backend/models/domain.py` — доменные сущности для реестра;
 - `backend/utils/*` — совместимость и служебные функции.
 
-### Service Layer
+### Сервисный слой
 
 Система разнесена по отдельным сервисам:
 
 - `DatasetService` — чтение `csv/xlsx`, валидация, schema checks;
 - `TrainingService` — обучение и регистрация модели;
-- `PredictionService` — загрузка champion-модели и inference;
+- `PredictionService` — загрузка champion-модели и выполнение предсказания;
 - `ExplanationService` — SHAP/explainability;
 - `DecisionService` — сбор фактов и генерация рекомендаций;
-- `RegistryService` — файловый dataset/model registry.
+- `RegistryService` — файловый реестр датасетов и моделей.
 
-### ML Layer
+### ML-слой
 
 ML-часть реализована через:
 
@@ -63,7 +67,7 @@ ML-часть реализована через:
 5. сохраняет bundle модели для повторного использования;
 6. при ошибке real-path переключается на `sklearn` fallback.
 
-### Explainability Layer
+### Слой объяснений
 
 Объяснения строятся в:
 
@@ -72,7 +76,7 @@ ML-часть реализована через:
 
 `SHAP` используется для локальных факторов влияния. Если explainability path не срабатывает, система может вернуться к proxy-feature-impact.
 
-### DSS Layer
+### DSS-слой
 
 Правила и рекомендации реализованы через:
 
@@ -94,14 +98,14 @@ ML-часть реализована через:
 - actions;
 - rationale.
 
-### Storage / Registry
+### Хранилище / реестр
 
-Пока используется файловая реализация registry:
+Пока используется файловая реализация реестра:
 
 - `storage/datasets/` — сохранённые версии датасетов;
 - `storage/artifacts/` — артефакты моделей и отчётов;
-- `storage/registry/datasets.json` — metadata датасетов;
-- `storage/registry/models.json` — metadata моделей.
+- `storage/registry/datasets.json` — метаданные датасетов;
+- `storage/registry/models.json` — метаданные моделей.
 
 Registry умеет:
 
@@ -136,9 +140,9 @@ ML-модуль получает данные не как файл и не ка�
 
 ### Контракт для предсказания
 
-Для inference ожидается `DataFrame` без `target`, но с совместимым набором исходных признаков.
+Для предсказания ожидается `DataFrame` без `target`, но с совместимым набором исходных признаков.
 
-Перед предсказанием применяется тот же препроцессор, который был сохранён в model bundle во время обучения.
+Перед предсказанием применяется тот же препроцессор, который был сохранён в bundle модели во время обучения.
 
 ## Предобработка данных
 
@@ -203,7 +207,7 @@ ML-модуль получает данные не как файл и не ка�
 
 ## API
 
-Реализованы следующие endpoints:
+Реализованы следующие эндпоинты:
 
 - `GET /health`
 - `POST /datasets/validate`
@@ -215,7 +219,7 @@ ML-модуль получает данные не как файл и не ка�
 - `POST /explanations/run`
 - `POST /decision/run`
 
-### Training Flow
+### Поток обучения
 
 `/training/run` и `/training/run/file` делают следующее:
 
@@ -227,17 +231,17 @@ ML-модуль получает данные не как файл и не ка�
 6. регистрируют model version;
 7. помечают модель как `candidate` или `champion`.
 
-### Prediction Flow
+### Поток предсказания
 
 `/predictions/run`:
 
-1. загружает champion bundle;
+1. загружает bundle champion-модели;
 2. применяет сохранённый preprocessing;
 3. выравнивает схему данных;
-4. выполняет inference;
+4. выполняет предсказание;
 5. возвращает prediction и, где возможно, confidence.
 
-### Explanation Flow
+### Поток объяснения
 
 `/explanations/run`:
 
@@ -245,7 +249,7 @@ ML-модуль получает данные не как файл и не ка�
 2. передаёт aligned features в `SHAP`;
 3. возвращает top factors по строкам.
 
-### Decision Flow
+### Поток поддержки решений
 
 `/decision/run`:
 
@@ -321,18 +325,20 @@ python scripts/render_visual_report.py \
 
 ## Визуализация
 
-На текущем этапе полноценного frontend UI ещё нет. Вместо него добавлен локальный HTML-report generator.
+В проекте уже есть минимальный фронтенд, который раздается FastAPI на `/app/`, и отдельный генератор HTML-отчета для офлайн-анализа.
 
 Статус:
 
-- `frontend/README.md` пока остаётся заглушкой;
-- визуализация доступна как статический HTML из backend-данных и registry.
+- `frontend/index.html`, `frontend/styles.css` и `frontend/app.js` формируют встроенный UI;
+- визуализация доступна и как живой интерфейс `/app/`, и как статический HTML из данных бэкенда и реестра.
 
 Это позволяет уже сейчас:
 
 - показать результат обучения;
 - визуально проверить важности признаков;
 - увидеть объяснения и рекомендации без отдельного клиента.
+- посмотреть сравнение `actual vs predicted`;
+- запустить прогноз и переобучение без отдельных CLI-скриптов.
 
 ## Тестирование
 
@@ -344,25 +350,25 @@ python scripts/render_visual_report.py \
 Покрытие на этой итерации включает:
 
 - healthcheck;
-- end-to-end training/prediction/decision flow;
+- сквозной поток обучения, предсказания и рекомендаций;
 - training from `xlsx` upload;
 - корректность `TabularPreprocessor`;
-- применение preprocessing в inference-path.
+- применение preprocessing в пути предсказания.
 
 ## Текущие ограничения
 
 1. `LightAutoML` всё ещё пишет warning про NLP extras (`gensim`, `transformers`).
 2. SHAP для больших sample size может быть дорогим по времени.
 3. Registry пока файловый, не PostgreSQL/S3.
-4. Frontend пока не реализован.
-5. Monitoring, retraining jobs и MLflow/Evidently пока существуют как направление архитектуры, а не как полный production-flow.
+4. Фронтенд минималистичный и пока без полноценного клиентского слоя на отдельном framework.
+5. Мониторинг, задания переобучения и MLflow/Evidently пока существуют как направление архитектуры, а не как полный production-контур.
 
 ## Что логично делать дальше
 
 Самые сильные следующие шаги:
 
-1. сделать frontend MVP;
+1. расширить текущий фронтенд до более полного клиентского интерфейса;
 2. стабилизировать explainability/logging;
-3. добавить retraining и monitoring;
-4. вынести policy сравнения `candidate`/`champion`;
-5. перейти от file registry к production storage.
+3. добавить переобучение и мониторинг;
+4. вынести политику сравнения `candidate`/`champion`;
+5. перейти от файлового реестра к продакшн-хранилищу.

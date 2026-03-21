@@ -1,5 +1,5 @@
-site_name: AdaptiveML DSS Docs
-site_description: Documentation for the AdaptiveML DSS backend, ML pipeline, DSS flow and tooling.
+site_name: Документация AdaptiveML DSS
+site_description: Документация по бэкенду, ML-контуру, DSS-слою и утилитам AdaptiveML DSS.
 site_url: https://maronari.github.io/AdaptiveML-DSS/
 repo_name: Maronari/AdaptiveML-DSS
 repo_url: https://github.com/Maronari/AdaptiveML-DSS
@@ -21,16 +21,26 @@ markdown_extensions:
       permalink: true
   - tables
   - pymdownx.highlight
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite
   - pymdownx.tabbed:
       alternate_style: true
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - javascripts/mermaid.js
+
 nav:
-  - Home: index.md
-  - Setup: setup.md
-  - Architecture: architecture.md
+  - Главная: index.md
+  - Установка: setup.md
+  - Архитектура: architecture.md
+  - Схема БД: database.md
+  - Общая ER-диаграмма: database-single-diagram.md
   - API: api.md
-  - CLI & Tooling: cli.md
-  - Visualization: visualization.md
-  - Implementation Overview: implementation-overview.md
+  - CLI и утилиты: cli.md
+  - Визуализация: visualization.md
+  - Обзор реализации: implementation-overview.md

@@ -1,37 +1,37 @@
 # API
 
-## Реализованные endpoints
+## Реализованные эндпоинты
 
-### System
+### Системные
 
 - `GET /health`
 
-### Dataset Validation
+### Валидация датасета
 
 - `POST /datasets/validate`
 - `POST /datasets/validate/file`
 
-### Training
+### Обучение
 
 - `POST /training/run`
 - `POST /training/run/file`
 
-### Prediction
+### Предсказание
 
 - `POST /predictions/run`
 - `POST /predictions/run/file`
 
-### Explainability
+### Объяснение
 
 - `POST /explanations/run`
 
-### Decision Support
+### Поддержка решений
 
 - `POST /decision/run`
 
 ## Форматы входа
 
-### Inline JSON
+### JSON
 
 Основной паттерн:
 
@@ -46,7 +46,7 @@
 }
 ```
 
-### File Upload
+### Загрузка файла
 
 Поддерживаются:
 
@@ -54,11 +54,11 @@
 - `xlsx`
 - `xls`
 
-Upload-endpoints используют `multipart/form-data`.
+Эндпоинты загрузки используют `multipart/form-data`.
 
-## Training Flow
+## Поток обучения
 
-### Inline
+### JSON
 
 `POST /training/run`
 
@@ -68,10 +68,10 @@ Upload-endpoints используют `multipart/form-data`.
 2. датасет валидируется;
 3. создаётся dataset version;
 4. запускается ML adapter;
-5. bundle модели сериализуется в registry;
-6. API возвращает model metadata и metrics.
+5. артефакт модели сериализуется в реестр;
+6. API возвращает метаданные модели и метрики.
 
-### File Upload
+### Загрузка файла
 
 `POST /training/run/file`
 
@@ -81,7 +81,7 @@ Upload-endpoints используют `multipart/form-data`.
 - `project_id`
 - `target`
 
-## Prediction Flow
+## Поток предсказания
 
 `POST /predictions/run`
 
@@ -103,13 +103,13 @@ Upload-endpoints используют `multipart/form-data`.
 
 На стороне backend:
 
-1. загружается champion bundle;
+1. загружается артефакт champion-модели;
 2. применяется сохранённый preprocessing;
 3. проверяется соответствие feature schema;
-4. модель делает inference;
-5. ответ нормализуется в API payload.
+4. модель выполняет предсказание;
+5. ответ нормализуется в формат API.
 
-## Explanation Flow
+## Поток объяснения
 
 `POST /explanations/run`
 
@@ -119,7 +119,7 @@ Upload-endpoints используют `multipart/form-data`.
 2. aligned features передаются в SHAP;
 3. по каждой строке собираются `top_factors`.
 
-## Decision Flow
+## Поток поддержки решений
 
 `POST /decision/run`
 
@@ -131,7 +131,7 @@ Upload-endpoints используют `multipart/form-data`.
 4. rule engine;
 5. recommendation.
 
-## Healthcheck
+## Проверка здоровья
 
 Простой endpoint:
 

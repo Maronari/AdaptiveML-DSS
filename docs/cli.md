@@ -1,4 +1,4 @@
-# CLI & Tooling
+# CLI и утилиты
 
 ## Полная установка окружения
 
@@ -74,7 +74,7 @@ python scripts/check_full_flow.py \
 - `/explanations/run`
 - `/decision/run`
 
-Это минимальный end-to-end smoke test для уже поднятого API.
+Это минимальный сквозной smoke test для уже поднятого API.
 
 ## Генерация HTML-репорта
 
@@ -92,10 +92,10 @@ python scripts/render_visual_report.py \
 
 Что делает:
 
-- загружает champion bundle из registry;
-- берёт связанный dataset;
-- строит prediction/explanation sample;
-- собирает DSS recommendations;
+- загружает артефакт champion-модели из реестра;
+- берёт связанный датасет;
+- строит sample предсказаний и объяснений;
+- собирает DSS-рекомендации;
 - генерирует HTML с графиками.
 
 Результат:
@@ -113,7 +113,7 @@ pytest -q
 На этой итерации тесты покрывают:
 
 - healthcheck;
-- train/predict/decision flow;
-- xlsx upload;
+- поток обучения, предсказания и рекомендаций;
+- загрузку `xlsx`;
 - preprocessing;
-- применение preprocessing в inference-path.
+- применение preprocessing в пути предсказания.

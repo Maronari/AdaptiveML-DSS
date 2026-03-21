@@ -1,4 +1,4 @@
-# AdaptiveML DSS Docs
+# Документация AdaptiveML DSS
 
 Это единая документация по текущему состоянию проекта `AdaptiveML DSS`.
 
@@ -6,14 +6,14 @@
 
 - установка и запуск;
 - архитектура backend и ML-контура;
-- API endpoints;
+- API-эндпоинты;
 - CLI-утилиты;
 - визуализация результатов;
 - сводка по реализованной функциональности.
 
 ## Что уже реализовано
 
-Проект уже собран в рабочий end-to-end поток:
+Проект уже собран в рабочий сквозной поток:
 
 `dataset -> training -> registry -> prediction -> explanation -> decision -> visualization`
 
@@ -31,12 +31,14 @@
 
 ## Карта документации
 
-- [Setup](setup.md) — установка, зависимости и нюансы окружения.
-- [Architecture](architecture.md) — как устроен backend, ML, explainability и DSS.
-- [API](api.md) — реализованные endpoints и их поток выполнения.
-- [CLI & Tooling](cli.md) — утилиты для прямого запуска, smoke-check и генерации отчёта.
-- [Visualization](visualization.md) — как сейчас устроен визуальный слой и отчёты.
-- [Implementation Overview](implementation-overview.md) — полная техническая сводка по реализованной итерации.
+- [Установка](setup.md) — установка, зависимости и нюансы окружения.
+- [Архитектура](architecture.md) — как устроен backend, ML, explainability и DSS.
+- [Схема БД](database.md) — описание компактной PostgreSQL-схемы и роли `JSONB`.
+- [Общая ER-диаграмма](database-single-diagram.md) — одна диаграмма со всеми основными сущностями.
+- [API](api.md) — реализованные эндпоинты и их поток выполнения.
+- [CLI и утилиты](cli.md) — утилиты для прямого запуска, smoke-check и генерации отчёта.
+- [Визуализация](visualization.md) — как сейчас устроен визуальный слой и отчёты.
+- [Обзор реализации](implementation-overview.md) — полная техническая сводка по реализованной итерации.
 
 ## Быстрый старт
 
@@ -54,7 +56,7 @@ uvicorn backend.main:app --reload
 python -m pip install -r requirements-docs.txt
 ```
 
-Запустить локальный docs-site:
+Запустить локальный сайт документации:
 
 ```bash
 mkdocs serve

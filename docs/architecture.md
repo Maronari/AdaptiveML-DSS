@@ -1,4 +1,4 @@
-# Architecture
+# Архитектура
 
 ## Общая схема
 
@@ -15,7 +15,7 @@
 
 `upload/json -> DataFrame -> preprocessing -> model -> explanation -> facts -> recommendation`
 
-## Backend
+## Бэкенд
 
 Точка входа:
 
@@ -32,7 +32,7 @@
 - сервисы работают с registry, ML и DSS слоями;
 - данные между слоями передаются как `pandas.DataFrame` и `dict` payload.
 
-## Service Layer
+## Сервисный слой
 
 ### DatasetService
 
@@ -98,7 +98,7 @@
 - прогнать facts через rule engine;
 - вернуть recommendation.
 
-## ML Layer
+## ML-слой
 
 ### Основной адаптер
 
@@ -142,7 +142,7 @@
 - на explanation;
 - в CLI `run_lightautoml.py`.
 
-## Explainability Layer
+## Слой объяснений
 
 Файлы:
 
@@ -157,7 +157,7 @@ Explainability path устроен так:
 4. contributions превращаются в `top_factors`;
 5. `top_factors` дальше идут в DSS.
 
-## DSS Layer
+## DSS-слой
 
 Файлы:
 
@@ -181,7 +181,7 @@ Explainability path устроен так:
 - `actions`
 - `rationale`
 
-## Storage / Registry
+## Хранилище / реестр
 
 Файлы:
 

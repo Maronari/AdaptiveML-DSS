@@ -1,6 +1,6 @@
-# Setup Notes
+# Установка и окружение
 
-Проект запускается на `FastAPI` и использует локальные файловые registry/directories как стартовую реализацию `Dataset Registry` и `Model Registry`.
+Проект запускается на `FastAPI` и использует локальные файловые каталоги как стартовую реализацию реестра датасетов и реестра моделей.
 
 ## Полный стек
 
@@ -21,6 +21,12 @@
 scripts/setup_full_env.sh python3.13
 ```
 
+Для Windows:
+
+```powershell
+scripts\setup_full_env.cmd
+```
+
 Если `python3.13` уже активен:
 
 ```bash
@@ -30,20 +36,20 @@ python -m pip install -r requirements.txt
 python -m pip install --no-deps "LightAutoML==0.4.1"
 ```
 
-## Core-only режим
+## Режим core-only
 
 `requirements-core.txt` оставлен только для текущего fallback/scaffold-режима, если нужно запускать backend на Python 3.14 без полного ML-стека.
 
 В этом режиме каркас использует:
 - sklearn fallback вместо `LightAutoML`;
 - proxy explainability вместо жёсткой SHAP-зависимости;
-- rule-based fallback вместо жёсткой `Experta`-зависимости.
+- fallback на правилах вместо жёсткой `Experta`-зависимости.
 
 API при этом уже собран так, чтобы заменить внутренние адаптеры без смены внешнего контракта.
 
 ## Документация
 
-Для unified docs-site добавлены:
+Для сайта документации добавлены:
 
 - `mkdocs.yml`
 - `requirements-docs.txt`
@@ -65,3 +71,53 @@ mkdocs serve
 ```bash
 mkdocs build
 ```
+
+## PostgreSQL и миграции
+
+Для локальной базы используется сервис `postgres` из `docker-compose.yml`.
+
+Запуск базы:
+
+```bash
+docker compose up -d postgres
+```
+
+Применение миграций:
+
+```bash
+python -m alembic upgrade head
+```
+
+По умолчанию Alembic подключается к:
+
+- `postgresql+psycopg2://adaptiveml:adaptiveml@localhost:5432/adaptiveml`
+
+Подключение можно переопределить через:
+
+- `ADAPTIVEML_DATABASE_URL`
+- или переменные `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+
+Где смотреть схему:
+
+- `storage/postgresql/schema.sql`
+- `docs/database.md`
+- `docs/database-single-diagram.md`
+
+## Запуск API и UI
+
+Linux/macOS:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
+```
+
+После запуска:
+
+- API: `http://localhost:8000`
+- UI: `http://localhost:8000/app/`
