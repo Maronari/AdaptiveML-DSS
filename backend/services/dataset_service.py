@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from fastapi import UploadFile
 
-from backend.utils.io import dataframe_from_records
+from backend.utils.io import dataframe_from_records, dataframe_to_records
 
 
 class DatasetService:
@@ -83,6 +83,7 @@ class DatasetService:
             "missing_values": missing,
             "duplicates": duplicates,
             "task_type": self.infer_task_type(frame[target]),
+            "sample_rows": dataframe_to_records(frame.head(12)),
         }
 
     @staticmethod

@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS Studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop backdrop-a"></div>
+    <div class="backdrop backdrop-b"></div>
+    <main class="page-shell">
+      <section class="hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow">AdaptiveML DSS</p>
+          <h1>Dataset, Compare, Retrain, Forecast</h1>
+          <p class="hero-text">
+            Upload a tabular dataset, choose how the model trains, compare actual
+            vs predicted values, retrain against newly labeled data, and generate
+            short-horizon forecasts from the latest time-series history.
+          </p>
+        </div>
+        <div class="hero-metadata">
+          <div class="meta-pill">API + UI same origin</div>
+          <div class="meta-pill">CSV / XLSX</div>
+          <div class="meta-pill">Backend + Preset + Algos</div>
+          <div class="meta-pill">Retraining Windows</div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel control-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Workflow</p>
+            <h2>Run Pipeline</h2>
+          </div>
+
+          <form id="workflow-form" class="form-stack">
+            <label class="field">
+              <span>Project ID</span>
+              <input id="project-id" name="project_id" value="demo" />
+            </label>
+
+            <label class="field">
+              <span>Target column</span>
+              <input id="target-column" name="target" placeholder="For example: target" />
+            </label>
+
+            <label class="field file-field">
+              <span>Dataset file</span>
+              <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" />
+            </label>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>Task type</span>
+                <select id="task-type" name="task_type">
+                  <option value="auto" selected>Auto infer</option>
+                  <option value="binary">Binary classification</option>
+                  <option value="multiclass">Multiclass classification</option>
+                  <option value="regression">Regression</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Training backend</span>
+                <select id="training-backend" name="backend">
+                  <option value="auto" selected>Auto select</option>
+                  <option value="lightautoml">LightAutoML</option>
+                  <option value="sklearn">sklearn fallback</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>LightAutoML preset</span>
+                <select id="training-preset" name="preset">
+                  <option value="tabular" selected>TabularAutoML</option>
+                  <option value="utilized">TabularUtilizedAutoML</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>CV folds</span>
+                <input id="cv-folds" name="cv_folds" type="number" min="0" value="0" />
+              </label>
+            </div>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>Timeout, sec</span>
+                <input id="timeout-seconds" name="timeout_seconds" type="number" min="5" value="30" />
+              </label>
+
+              <label class="field">
+                <span>CPU limit</span>
+                <input id="cpu-limit" name="cpu_limit" type="number" min="1" value="1" />
+              </label>
+            </div>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>Holdout test size</span>
+                <input id="test-size" name="test_size" type="number" min="0.05" max="0.95" step="0.05" value="0.20" />
+              </label>
+
+              <div class="field">
+                <span>Forecast head</span>
+                <label class="toggle">
+                  <input id="enable-forecast" name="enable_forecast" type="checkbox" checked />
+                  <span>Attach temporal forecast bundle for regression datasets</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <span>LightAutoML algorithms</span>
+              <div id="algo-options" class="algo-grid">
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="lgb" checked />
+                  <span>LightGBM</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="linear_l2" checked />
+                  <span>Linear L2</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="cb" />
+                  <span>CatBoost</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="xgb" />
+                  <span>XGBoost</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="rf" />
+                  <span>RandomForest</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="nn" />
+                  <span>Neural Net</span>
+                </label>
+              </div>
+              <div id="training-options-note" class="field-note">
+                Preset, algorithms, CV and timeout apply only to the LightAutoML backend.
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>Forecast horizon, min</span>
+                <input id="forecast-minutes" name="forecast_minutes" type="number" min="1" value="30" />
+              </label>
+
+              <label class="field">
+                <span>Forecast steps</span>
+                <input id="forecast-steps" name="forecast_steps" type="number" min="1" value="4" />
+              </label>
+            </div>
+
+            <div class="inline-grid">
+              <label class="field">
+                <span>Retraining history</span>
+                <select id="retrain-history-scope" name="history_scope">
+                  <option value="all_history" selected>All old data + new batch</option>
+                  <option value="last_30_days">Last 30 days + new batch</option>
+                  <option value="last_60_days">Last 60 days + new batch</option>
+                  <option value="last_90_days">Last 90 days + new batch</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Minimum profit, %</span>
+                <input
+                  id="retrain-improvement-threshold"
+                  name="minimum_relative_improvement_percent"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value="3"
+                />
+              </label>
+            </div>
+
+            <div class="field">
+              <span>Activation policy</span>
+              <label class="toggle">
+                <input id="retrain-auto-activate" name="auto_activate" type="checkbox" checked />
+                <span>Activate the candidate automatically only when the measured profit reaches the threshold</span>
+              </label>
+            </div>
+
+            <div class="button-grid">
+              <button type="button" id="validate-button" class="button button-secondary">Validate</button>
+              <button type="button" id="train-button" class="button button-secondary">Train</button>
+              <button type="button" id="retrain-button" class="button button-secondary">Retrain</button>
+              <button type="button" id="compare-button" class="button button-secondary">Compare</button>
+              <button type="button" id="forecast-button" class="button button-secondary">Forecast</button>
+              <button type="button" id="train-compare-button" class="button button-primary">Train + Compare</button>
+            </div>
+          </form>
+
+          <div class="info-block">
+            <h3>What this page does</h3>
+            <ul>
+              <li>validates dataset shape and shows sample rows;</li>
+              <li>trains a champion model from the uploaded file;</li>
+              <li>re-trains a challenger on all history or the last 30/60/90 days plus the new batch;</li>
+              <li>lets you choose task type, backend, LightAutoML preset and algorithms;</li>
+              <li>compares actual target values against model predictions;</li>
+              <li>forecasts the next short horizon from recent temporal history.</li>
+            </ul>
+          </div>
+
+          <div id="status-banner" class="status-banner status-idle">
+            Ready.
+          </div>
+        </aside>
+
+        <section class="content-stack">
+          <section class="panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Summary</p>
+              <h2>Dataset &amp; Model Overview</h2>
+            </div>
+            <div id="summary-cards" class="summary-grid">
+              <article class="summary-card summary-card-empty">
+                <span>Run validate, train, compare, or forecast to populate this panel.</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Preview</p>
+              <h2>Dataset Rows</h2>
+            </div>
+            <div id="dataset-preview" class="table-shell table-placeholder">
+              Upload a dataset to inspect sample rows.
+            </div>
+          </section>
+
+          <section class="panel chart-panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Comparison</p>
+              <h2 id="chart-title">Actual vs Predicted</h2>
+            </div>
+            <div class="chart-frame">
+              <canvas id="prediction-chart" height="420"></canvas>
+              <div id="chart-empty-state" class="chart-empty-state">
+                Run compare to build the chart.
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Comparison</p>
+              <h2>Predictions Table</h2>
+            </div>
+            <div id="comparison-table" class="table-shell table-placeholder">
+              The merged dataset and prediction table will appear here.
+            </div>
+          </section>
+
+          <section class="panel chart-panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Forecast</p>
+              <h2 id="forecast-chart-title">Recent History + Future Points</h2>
+            </div>
+            <div class="chart-frame">
+              <canvas id="forecast-chart" height="360"></canvas>
+              <div id="forecast-empty-state" class="chart-empty-state">
+                Train a temporal regression model and run forecast to see future points.
+              </div>
+            </div>
+            <div id="forecast-warning" class="status-banner status-idle">
+              Forecast notes will appear here.
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Forecast</p>
+              <h2>Forecast Table</h2>
+            </div>
+            <div id="forecast-table" class="table-shell table-placeholder">
+              Future forecast rows will appear here after the forecast call.
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

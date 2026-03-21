@@ -4,9 +4,11 @@ from typing import Any
 
 from fastapi import UploadFile
 
+from automl.evaluation.metrics import evaluate_predictions
+from automl.training.forecasting import run_forecast_from_bundle
 from backend.services.dataset_service import DatasetService
 from backend.services.registry_service import RegistryService
-from backend.utils.io import dataframe_from_records, pythonize
+from backend.utils.io import dataframe_from_records, dataframe_to_records, pythonize
 
 
 class PredictionService:
@@ -31,6 +33,89 @@ class PredictionService:
         """Run prediction for an uploaded CSV or Excel file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
         return self.predict(project_id=project_id, records=frame.to_dict(orient="records"))
+
+    def compare_with_actual(
+        self,
+        project_id: str,
+        target: str,
+        records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return actual/predicted pairs for a labeled dataset."""
+        champion, bundle = self.registry_service.get_champion_bundle(project_id)
+        frame = dataframe_from_records(records)
+        if target not in frame.columns:
+            raise ValueError(f"Target column '{target}' is missing.")
+
+        actual = frame[target].copy()
+        inference_frame = frame.drop(columns=[target])
+        predictions = self.predict_with_bundle(bundle=bundle, frame=inference_frame)
+        predicted_values = [item["prediction"] for item in predictions]
+        metrics = evaluate_predictions(
+            task_type=champion["task_type"],
+            y_true=actual,
+            y_pred=predicted_values,
+        )
+        raw_rows = dataframe_to_records(frame)
+
+        comparison_items = []
+        for index, prediction in enumerate(predictions):
+            comparison_items.append(
+                {
+                    "row_index": index,
+                    "actual": pythonize(actual.iloc[index]),
+                    "prediction": prediction["prediction"],
+                    "confidence": prediction["confidence"],
+                    "record": raw_rows[index],
+                }
+            )
+
+        return {
+            "project_id": project_id,
+            "model_version": champion["version_id"],
+            "task_type": champion["task_type"],
+            "target": target,
+            "rows": int(len(frame)),
+            "columns": frame.columns.tolist(),
+            "metrics": metrics,
+            "items": comparison_items,
+        }
+
+    async def compare_with_actual_from_upload(
+        self,
+        project_id: str,
+        target: str,
+        upload: UploadFile,
+    ) -> dict[str, Any]:
+        """Return actual/predicted pairs for an uploaded labeled file."""
+        frame = await self.dataset_service.read_uploaded_tabular(upload)
+        return self.compare_with_actual(
+            project_id=project_id,
+            target=target,
+            records=frame.to_dict(orient="records"),
+        )
+
+    def forecast(
+        self,
+        project_id: str,
+        horizon_minutes: int = 30,
+        steps: int = 1,
+    ) -> dict[str, Any]:
+        """Forecast future target values from the champion model's stored history."""
+        champion, bundle = self.registry_service.get_champion_bundle(project_id)
+        if champion["task_type"] != "regression":
+            raise ValueError("Forecasting is available only for regression models.")
+
+        forecast_payload = run_forecast_from_bundle(
+            bundle=bundle,
+            steps=steps,
+            horizon_minutes=horizon_minutes,
+        )
+        return {
+            "project_id": project_id,
+            "model_version": champion["version_id"],
+            "task_type": champion["task_type"],
+            **forecast_payload,
+        }
 
     def predict_with_bundle(self, bundle: dict[str, Any], frame) -> list[dict[str, Any]]:
         """Predict from a preloaded model bundle and a raw DataFrame."""

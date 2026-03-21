@@ -1,10 +1,13 @@
 import importlib
+import math
 import sys
 from io import BytesIO
 
 import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
+
+from automl.lightautoml_backend.adapter import LIGHTAUTOML_AVAILABLE
 
 
 TRAINING_DATASET = [
@@ -19,6 +22,44 @@ TRAINING_DATASET = [
     {"temperature": 73, "vibration": 0.43, "pressure": 96, "target": 0},
     {"temperature": 94, "vibration": 0.93, "pressure": 120, "target": 1},
 ]
+
+
+def build_forecasting_dataset(rows: int = 96) -> list[dict[str, float | str | int]]:
+    timestamps = pd.date_range("2024-01-01 00:00:00", periods=rows, freq="h")
+    dataset = []
+    for index, timestamp in enumerate(timestamps):
+        signal = (
+            180.0
+            + index * 0.35
+            + 22.0 * math.sin(2.0 * math.pi * timestamp.hour / 24.0)
+            + (8.0 if timestamp.dayofweek < 5 else -4.0)
+        )
+        dataset.append(
+            {
+                "Дата": timestamp.isoformat(),
+                "Рабочий день": int(timestamp.dayofweek < 5),
+                "Электропотребление": round(signal, 3),
+            }
+        )
+    return dataset
+
+
+def build_retraining_dataset(rows: int = 180) -> list[dict[str, float | str | int]]:
+    timestamps = pd.date_range("2024-01-01 00:00:00", periods=rows, freq="D")
+    dataset = []
+    for index, timestamp in enumerate(timestamps):
+        regime_shift = 60.0 if index >= 150 else 0.0
+        weekly_pattern = 8.0 if timestamp.dayofweek < 5 else -4.0
+        target = 120.0 + index * 2.4 + regime_shift + weekly_pattern
+        dataset.append(
+            {
+                "timestamp": timestamp.isoformat(),
+                "period_index": index,
+                "daily_temperature": round(14.0 + math.sin(index / 6.0) * 4.5, 3),
+                "target": round(target, 3),
+            }
+        )
+    return dataset
 
 
 @pytest.fixture()
@@ -44,6 +85,19 @@ def test_healthcheck(client: TestClient):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_favicon_returns_empty_response(client: TestClient):
+    response = client.get("/favicon.ico")
+    assert response.status_code == 204
+    assert response.text == ""
+
+
+def test_frontend_app_served(client: TestClient):
+    response = client.get("/app/")
+    assert response.status_code == 200
+    assert "AdaptiveML DSS Studio" in response.text
+    assert "Training backend" in response.text
 
 
 def test_training_prediction_and_decision_flow(client: TestClient):
@@ -101,3 +155,231 @@ def test_training_from_xlsx_upload(client: TestClient):
     assert response.status_code == 200
     body = response.json()
     assert body["backend"] in {"lightautoml", "sklearn-fallback"}
+
+
+def test_training_with_explicit_sklearn_options(client: TestClient):
+    response = client.post(
+        "/training/run",
+        json={
+            "project_id": "sklearn-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+            "training_options": {
+                "task_type": "binary",
+                "backend": "sklearn",
+                "preset": "utilized",
+                "algos": ["cb", "xgb"],
+                "timeout_seconds": 45,
+                "cpu_limit": 1,
+                "test_size": 0.3,
+                "cv_folds": 4,
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["backend"] == "sklearn-fallback"
+    assert body["training_options"]["requested"]["backend"] == "sklearn"
+    assert body["training_options"]["requested"]["preset"] == "utilized"
+    assert body["training_options"]["effective"]["preset"] == "sklearn-random-forest"
+    assert body["training_options"]["effective"]["algos"] == ["rf"]
+    assert body["warnings"]
+
+
+@pytest.mark.skipif(not LIGHTAUTOML_AVAILABLE, reason="LightAutoML is not available")
+def test_training_with_utilized_lightautoml_preset(client: TestClient):
+    response = client.post(
+        "/training/run",
+        json={
+            "project_id": "utilized-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+            "training_options": {
+                "task_type": "binary",
+                "backend": "lightautoml",
+                "preset": "utilized",
+                "algos": ["lgb", "linear_l2"],
+                "timeout_seconds": 10,
+                "cpu_limit": 1,
+                "test_size": 0.2,
+                "cv_folds": 2,
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["backend"] == "lightautoml"
+    assert body["training_options"]["effective"]["preset"] == "utilized"
+    assert body["training_options"]["effective"]["algos"] == ["lgb", "linear_l2"]
+    assert body["training_options"]["effective"]["cv_folds"] == 2
+
+
+def test_prediction_compare_from_xlsx_upload(client: TestClient):
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "compare-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = pd.DataFrame(TRAINING_DATASET)
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/predictions/compare/file",
+        files={
+            "file": (
+                "compare.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "compare-demo", "target": "target"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rows"] == len(TRAINING_DATASET)
+    assert body["target"] == "target"
+    assert body["items"][0]["record"]["target"] in {0, 1}
+    assert "prediction" in body["items"][0]
+    assert body["metrics"]
+
+
+def test_forecast_run_from_temporal_regression_dataset(client: TestClient):
+    forecasting_dataset = build_forecasting_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "forecast-demo",
+            "target": "Электропотребление",
+            "records": forecasting_dataset,
+        },
+    )
+    assert train_response.status_code == 200
+    training_body = train_response.json()
+    assert training_body["task_type"] == "regression"
+    assert training_body["forecasting"]["available"] is True
+
+    forecast_response = client.post(
+        "/forecast/run",
+        json={
+            "project_id": "forecast-demo",
+            "horizon_minutes": 30,
+            "steps": 3,
+        },
+    )
+    assert forecast_response.status_code == 200
+    body = forecast_response.json()
+    assert body["target"] == "Электропотребление"
+    assert body["steps"] == 3
+    assert body["base_frequency_minutes"] == 60
+    assert len(body["forecast"]) == 3
+    assert len(body["recent_history"]) > 0
+    assert body["warning"] is not None
+    assert body["forecast"][0]["timestamp"] < body["forecast"][1]["timestamp"] < body["forecast"][2]["timestamp"]
+
+
+def test_retraining_all_history_activates_better_candidate(client: TestClient):
+    dataset = build_retraining_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "retrain-demo",
+            "target": "target",
+            "records": dataset[:150],
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+    initial_model_version = train_response.json()["model_version"]["version_id"]
+
+    new_frame = pd.DataFrame(dataset[150:])
+    payload = BytesIO()
+    new_frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    retrain_response = client.post(
+        "/retraining/run/file",
+        files={
+            "file": (
+                "new_labeled.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={
+            "project_id": "retrain-demo",
+            "target": "target",
+            "backend": "sklearn",
+            "enable_forecast": "false",
+            "history_scope": "all_history",
+            "minimum_relative_improvement": "0.01",
+        },
+    )
+    assert retrain_response.status_code == 200
+    body = retrain_response.json()
+    assert body["current_model_version"] == initial_model_version
+    assert body["activated"] is True
+    assert body["candidate_model_version"]["status"] == "champion"
+    assert body["evaluation"]["profit"]["is_better"] is True
+    assert body["evaluation"]["profit"]["meets_threshold"] is True
+    assert body["selection_summary"]["historical_rows_selected"] == 150
+    assert body["selection_summary"]["new_rows_reserved_for_evaluation"] == 6
+
+
+def test_retraining_recent_window_uses_last_30_days_history(client: TestClient):
+    dataset = build_retraining_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "retrain-window-demo",
+            "target": "target",
+            "records": dataset[:150],
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    response = client.post(
+        "/retraining/run",
+        json={
+            "project_id": "retrain-window-demo",
+            "target": "target",
+            "records": dataset[150:],
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+            "retraining_options": {
+                "history_scope": "last_30_days",
+                "minimum_relative_improvement": 0.01,
+                "auto_activate": False,
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["activated"] is False
+    assert body["selection_summary"]["history_scope"] == "last_30_days"
+    assert body["selection_summary"]["historical_rows_selected"] == 31
+    assert body["selection_summary"]["new_rows_used_for_training"] == 24
+    assert body["selection_summary"]["candidate_training_rows"] == 55

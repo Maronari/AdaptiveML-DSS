@@ -8,6 +8,14 @@ import numpy as np
 
 def patch_numpy_for_lightautoml() -> None:
     """Restore numpy APIs expected by LightAutoML on NumPy 2.x."""
+    if not hasattr(np, "NaN"):
+        np.NaN = np.nan
+    if not hasattr(np, "Inf"):
+        np.Inf = np.inf
+    if not hasattr(np, "PINF"):
+        np.PINF = np.inf
+    if not hasattr(np, "NINF"):
+        np.NINF = -np.inf
     if hasattr(np, "find_common_type"):
         return
 

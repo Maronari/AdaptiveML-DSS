@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -50,6 +48,19 @@ class RegistryService:
         self.registry.write("datasets", datasets)
         return record
 
+    def load_dataset_version_frame(self, version_id: str) -> pd.DataFrame:
+        """Load the persisted frame for a dataset version id."""
+        dataset = self.get_dataset_version(version_id)
+        return pd.read_csv(dataset["path"])
+
+    def get_dataset_version(self, version_id: str) -> dict[str, Any]:
+        """Return one dataset version record by id."""
+        datasets = self.registry.read("datasets")
+        for dataset in datasets:
+            if dataset["version_id"] == version_id:
+                return dataset
+        raise ValueError(f"Dataset version '{version_id}' was not found.")
+
     def register_model_version(
         self,
         project_id: str,
@@ -59,8 +70,12 @@ class RegistryService:
         feature_names: list[str],
         metrics: dict[str, float],
         bundle: dict[str, Any],
+        promotion_mode: str = "auto",
     ) -> ModelVersion:
         """Persist a trained model bundle and update champion status."""
+        if promotion_mode not in {"auto", "candidate"}:
+            raise ValueError("promotion_mode must be 'auto' or 'candidate'.")
+
         models = self.registry.read("models")
         version_id = self._new_version_id("model")
         artifact_dir = self.settings.artifacts_dir / project_id / version_id
@@ -71,12 +86,13 @@ class RegistryService:
 
         primary_metric = self._primary_metric(task_type)
         status = "candidate"
-        champion = self._find_champion(models, project_id)
-        if champion is None or self._is_better(metrics, champion["metrics"], primary_metric):
-            status = "champion"
-            for model in models:
-                if model["project_id"] == project_id and model["status"] == "champion":
-                    model["status"] = "archived"
+        if promotion_mode == "auto":
+            champion = self._find_champion(models, project_id)
+            if champion is None or self._is_better(metrics, champion["metrics"], primary_metric):
+                status = "champion"
+                for model in models:
+                    if model["project_id"] == project_id and model["status"] == "champion":
+                        model["status"] = "archived"
 
         record = ModelVersion(
             version_id=version_id,
@@ -104,6 +120,34 @@ class RegistryService:
 
         bundle = joblib.load(champion["artifact_path"])
         return champion, bundle
+
+    def get_model_version(self, version_id: str) -> dict[str, Any]:
+        """Return one model version record by id."""
+        models = self.registry.read("models")
+        for model in models:
+            if model["version_id"] == version_id:
+                return model
+        raise ValueError(f"Model version '{version_id}' was not found.")
+
+    def activate_model_version(self, project_id: str, version_id: str) -> ModelVersion:
+        """Mark the selected version as champion and archive the previous champion."""
+        models = self.registry.read("models")
+        selected: dict[str, Any] | None = None
+
+        for model in models:
+            if model["project_id"] != project_id:
+                continue
+            if model["status"] == "champion":
+                model["status"] = "archived"
+            if model["version_id"] == version_id:
+                selected = model
+
+        if selected is None:
+            raise ValueError(f"Model version '{version_id}' was not found for project '{project_id}'.")
+
+        selected["status"] = "champion"
+        self.registry.write("models", models)
+        return ModelVersion(**selected)
 
     @staticmethod
     def _primary_metric(task_type: str) -> str:

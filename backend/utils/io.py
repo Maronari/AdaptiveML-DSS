@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +24,21 @@ def pythonize(value: Any) -> Any:
         return float(value)
     if isinstance(value, (np.bool_,)):
         return bool(value)
+    if isinstance(value, (pd.Timestamp, datetime, date, time)):
+        return value.isoformat()
     if pd.isna(value):
         return None
     return value
+
+
+def pythonize_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Convert every record value into a JSON-safe Python representation."""
+    return {str(key): pythonize(value) for key, value in record.items()}
+
+
+def dataframe_to_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert a DataFrame into JSON-safe records."""
+    return [pythonize_record(record) for record in frame.to_dict(orient="records")]
 
 
 def read_json(path: Path) -> list[dict[str, Any]]:

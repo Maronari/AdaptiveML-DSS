@@ -1,12 +1,16 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes import router
 from backend.services.settings import get_settings
 
 
 settings = get_settings()
+frontend_dir = Path(__file__).resolve().parents[1] / "frontend"
 
 
 @asynccontextmanager
@@ -24,4 +28,13 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Return an empty favicon response to keep logs clean."""
+    return Response(status_code=204)
+
+
 app.include_router(router)
+app.mount("/app", StaticFiles(directory=frontend_dir, html=True), name="frontend")

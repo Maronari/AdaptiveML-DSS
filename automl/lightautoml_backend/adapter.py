@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -13,14 +13,16 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from automl.evaluation.metrics import evaluate_predictions, primary_metric_name, scoring_function
+from automl.training.forecasting import build_forecasting_bundle
 from automl.training.preprocessing import TabularPreprocessor
 from backend.services.dataset_service import DatasetService
 from backend.services.settings import get_settings
 from backend.utils.compat import patch_numpy_for_lightautoml
 
 
+patch_numpy_for_lightautoml()
+
 try:
-    patch_numpy_for_lightautoml()
     import lightautoml  # type: ignore  # noqa: F401
     from lightautoml.automl.presets.tabular_presets import TabularAutoML
     from lightautoml.tasks import Task
@@ -28,16 +30,137 @@ try:
     LIGHTAUTOML_AVAILABLE = True
 except Exception:
     LIGHTAUTOML_AVAILABLE = False
+    TabularAutoML = None
+    Task = None
+
+if LIGHTAUTOML_AVAILABLE:
+    try:
+        from lightautoml.automl.presets.tabular_presets import TabularUtilizedAutoML
+
+        TABULAR_UTILIZED_AVAILABLE = True
+    except Exception:
+        TABULAR_UTILIZED_AVAILABLE = False
+        TabularUtilizedAutoML = None
+else:
+    TABULAR_UTILIZED_AVAILABLE = False
+    TabularUtilizedAutoML = None
+
+
+SUPPORTED_TASK_TYPES = {"auto", "binary", "multiclass", "regression"}
+SUPPORTED_BACKENDS = {"auto", "lightautoml", "sklearn"}
+SUPPORTED_PRESETS = {"tabular", "utilized"}
+SUPPORTED_LIGHTAUTOML_ALGOS = {"lgb", "cb", "xgb", "rf", "linear_l2", "nn"}
+
+
+def _default_lama_algos() -> list[str]:
+    return ["lgb", "linear_l2"]
+
+
+@dataclass(slots=True)
+class TrainingOptions:
+    task_type: str = "auto"
+    backend: str = "auto"
+    preset: str = "tabular"
+    algos: list[str] = field(default_factory=_default_lama_algos)
+    timeout_seconds: int = 30
+    cpu_limit: int = 1
+    test_size: float = 0.2
+    cv_folds: int = 0
+    enable_forecast: bool = True
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None = None) -> "TrainingOptions":
+        payload = payload or {}
+        task_type = str(payload.get("task_type", "auto")).strip().lower() or "auto"
+        backend = str(payload.get("backend", "auto")).strip().lower() or "auto"
+        preset = str(payload.get("preset", "tabular")).strip().lower() or "tabular"
+        timeout_seconds = int(payload.get("timeout_seconds", 30))
+        cpu_limit = int(payload.get("cpu_limit", 1))
+        test_size = float(payload.get("test_size", 0.2))
+        cv_folds = int(payload.get("cv_folds", 0))
+        enable_forecast = bool(payload.get("enable_forecast", True))
+        algos = cls._normalize_algos(payload.get("algos"))
+
+        if task_type not in SUPPORTED_TASK_TYPES:
+            raise ValueError(
+                f"Unsupported task_type '{task_type}'. Choose one of: {', '.join(sorted(SUPPORTED_TASK_TYPES))}."
+            )
+        if backend not in SUPPORTED_BACKENDS:
+            raise ValueError(
+                f"Unsupported backend '{backend}'. Choose one of: {', '.join(sorted(SUPPORTED_BACKENDS))}."
+            )
+        if preset not in SUPPORTED_PRESETS:
+            raise ValueError(
+                f"Unsupported preset '{preset}'. Choose one of: {', '.join(sorted(SUPPORTED_PRESETS))}."
+            )
+        unknown_algos = [algo for algo in algos if algo not in SUPPORTED_LIGHTAUTOML_ALGOS]
+        if unknown_algos:
+            raise ValueError(
+                f"Unsupported LightAutoML algorithms: {', '.join(unknown_algos)}. "
+                f"Choose from: {', '.join(sorted(SUPPORTED_LIGHTAUTOML_ALGOS))}."
+            )
+        if timeout_seconds < 5:
+            raise ValueError("timeout_seconds must be at least 5.")
+        if cpu_limit < 1:
+            raise ValueError("cpu_limit must be at least 1.")
+        if not 0.0 < test_size < 1.0:
+            raise ValueError("test_size must be greater than 0 and less than 1.")
+        if cv_folds == 1 or cv_folds < 0:
+            raise ValueError("cv_folds must be 0 for auto or at least 2.")
+
+        return cls(
+            task_type=task_type,
+            backend=backend,
+            preset=preset,
+            algos=algos,
+            timeout_seconds=timeout_seconds,
+            cpu_limit=cpu_limit,
+            test_size=test_size,
+            cv_folds=cv_folds,
+            enable_forecast=enable_forecast,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task_type": self.task_type,
+            "backend": self.backend,
+            "preset": self.preset,
+            "algos": list(self.algos),
+            "timeout_seconds": self.timeout_seconds,
+            "cpu_limit": self.cpu_limit,
+            "test_size": self.test_size,
+            "cv_folds": self.cv_folds,
+            "enable_forecast": self.enable_forecast,
+        }
+
+    @staticmethod
+    def _normalize_algos(raw_algos: Any) -> list[str]:
+        if raw_algos is None:
+            return _default_lama_algos()
+        if isinstance(raw_algos, str):
+            values = raw_algos.split(",")
+        else:
+            values = list(raw_algos)
+
+        normalized: list[str] = []
+        for value in values:
+            algo = str(value).strip().lower()
+            if algo and algo not in normalized:
+                normalized.append(algo)
+        return normalized or _default_lama_algos()
 
 
 @dataclass(slots=True)
 class TrainingResult:
     """Normalized training output returned by any backend path."""
+
     task_type: str
     feature_names: list[str]
     metrics: dict[str, float]
     bundle: dict[str, Any]
     backend_name: str
+    training_options: dict[str, Any]
+    warnings: list[str]
 
 
 class TabularAutoMLAdapter:
@@ -45,20 +168,86 @@ class TabularAutoMLAdapter:
         """Create a training adapter with project-wide settings."""
         self.settings = get_settings()
 
-    def train(self, frame: pd.DataFrame, target: str) -> TrainingResult:
-        """Train with LightAutoML first and fallback to sklearn on failure."""
+    def train(
+        self,
+        frame: pd.DataFrame,
+        target: str,
+        training_options: dict[str, Any] | None = None,
+    ) -> TrainingResult:
+        """Train with the selected backend and return a normalized bundle."""
+        options = TrainingOptions.from_payload(training_options)
+        task_type = self._resolve_task_type(frame[target], options.task_type)
+        requested_options = options.to_dict()
+        warnings: list[str] = []
+
+        if options.backend == "sklearn":
+            warnings.extend(self._sklearn_ignored_option_warnings(options))
+            result = self._train_with_sklearn(
+                frame=frame,
+                target=target,
+                task_type=task_type,
+                options=options,
+            )
+            return self._finalize_training_result(result, requested_options, warnings)
+
+        if options.backend == "lightautoml":
+            if not LIGHTAUTOML_AVAILABLE:
+                raise ValueError("LightAutoML backend is not available in this environment.")
+            try:
+                result = self._train_with_lightautoml(
+                    frame=frame,
+                    target=target,
+                    task_type=task_type,
+                    options=options,
+                )
+            except ValueError:
+                raise
+            except Exception as exc:
+                raise ValueError(f"LightAutoML training failed: {exc}") from exc
+            return self._finalize_training_result(result, requested_options, warnings)
+
         if LIGHTAUTOML_AVAILABLE:
             try:
-                return self._train_with_lightautoml(frame=frame, target=target)
-            except Exception:
-                pass
-        return self._train_with_sklearn(frame=frame, target=target)
+                result = self._train_with_lightautoml(
+                    frame=frame,
+                    target=target,
+                    task_type=task_type,
+                    options=options,
+                )
+                return self._finalize_training_result(result, requested_options, warnings)
+            except ValueError:
+                raise
+            except Exception as exc:
+                warnings.append(f"LightAutoML training failed and sklearn fallback was used: {exc}")
 
-    def _train_with_lightautoml(self, frame: pd.DataFrame, target: str) -> TrainingResult:
-        """Train a real LightAutoML model and build a reusable bundle."""
+        warnings.extend(self._sklearn_ignored_option_warnings(options))
+        result = self._train_with_sklearn(
+            frame=frame,
+            target=target,
+            task_type=task_type,
+            options=options,
+        )
+        return self._finalize_training_result(result, requested_options, warnings)
+
+    def _train_with_lightautoml(
+        self,
+        frame: pd.DataFrame,
+        target: str,
+        task_type: str,
+        options: TrainingOptions,
+    ) -> TrainingResult:
+        """Train a LightAutoML preset and build a reusable bundle."""
+        if options.preset == "utilized" and not TABULAR_UTILIZED_AVAILABLE:
+            raise ValueError("TabularUtilizedAutoML preset is not available in this environment.")
+
         preprocessor = TabularPreprocessor()
         prepared = preprocessor.fit_transform(frame, target=target)
-        task_type = DatasetService.infer_task_type(frame[target])
+        forecasting_bundle = self._build_forecasting_bundle(
+            frame=frame,
+            target=target,
+            task_type=task_type,
+            options=options,
+        )
         feature_names = [column for column in prepared.columns if column != target]
 
         x = prepared[feature_names].copy()
@@ -70,20 +259,21 @@ class TabularAutoMLAdapter:
         x_train, x_test, y_train, y_test = train_test_split(
             x,
             y,
-            test_size=0.2,
+            test_size=options.test_size,
             random_state=self.settings.random_state,
             stratify=stratify,
         )
 
         train_frame = x_train.copy()
         train_frame[target] = y_train.to_numpy()
-        cv_folds = self._lightautoml_cv_folds(y_train, task_type)
+        cv_folds = options.cv_folds if options.cv_folds > 0 else self._lightautoml_cv_folds(y_train, task_type)
         automl_task = Task("reg") if task_type == "regression" else Task(task_type)
-        automl = TabularAutoML(
+        automl_class = TabularUtilizedAutoML if options.preset == "utilized" else TabularAutoML
+        automl = automl_class(
             task=automl_task,
-            timeout=30,
-            cpu_limit=1,
-            general_params={"use_algos": [["lgb", "linear_l2"]]},
+            timeout=options.timeout_seconds,
+            cpu_limit=options.cpu_limit,
+            general_params={"use_algos": [options.algos]},
             reader_params={"advanced_roles": False, "cv": cv_folds},
         )
         automl.fit_predict(train_frame, roles={"target": target}, verbose=0)
@@ -93,6 +283,7 @@ class TabularAutoMLAdapter:
             automl=automl,
             task_type=task_type,
             raw_predictions=raw_predictions,
+            fallback_class_mapping=self._class_mapping(frame[target]),
         )
         metrics = evaluate_predictions(
             task_type=task_type,
@@ -100,6 +291,15 @@ class TabularAutoMLAdapter:
             y_pred=predictions,
         )
 
+        effective_options = self._effective_options(
+            options=options,
+            task_type=task_type,
+            backend="lightautoml",
+            preset=options.preset,
+            algos=options.algos,
+            cv_folds=cv_folds,
+            enable_forecast=forecasting_bundle is not None,
+        )
         bundle = {
             "pipeline": automl,
             "task_type": task_type,
@@ -113,8 +313,10 @@ class TabularAutoMLAdapter:
             "metrics": metrics,
             "primary_metric": primary_metric_name(task_type),
             "backend_name": "lightautoml",
+            "preset_name": options.preset,
             "class_mapping": class_mapping,
             "preprocessor": preprocessor,
+            "forecasting": forecasting_bundle,
         }
 
         return TrainingResult(
@@ -123,13 +325,26 @@ class TabularAutoMLAdapter:
             metrics=metrics,
             bundle=bundle,
             backend_name="lightautoml",
+            training_options={"effective": effective_options},
+            warnings=[],
         )
 
-    def _train_with_sklearn(self, frame: pd.DataFrame, target: str) -> TrainingResult:
+    def _train_with_sklearn(
+        self,
+        frame: pd.DataFrame,
+        target: str,
+        task_type: str,
+        options: TrainingOptions,
+    ) -> TrainingResult:
         """Train the sklearn fallback path with the same external contract."""
         tabular_preprocessor = TabularPreprocessor()
         prepared = tabular_preprocessor.fit_transform(frame, target=target)
-        task_type = DatasetService.infer_task_type(frame[target])
+        forecasting_bundle = self._build_forecasting_bundle(
+            frame=frame,
+            target=target,
+            task_type=task_type,
+            options=options,
+        )
         feature_names = [column for column in prepared.columns if column != target]
 
         x = prepared[feature_names].copy()
@@ -141,7 +356,7 @@ class TabularAutoMLAdapter:
         x_train, x_test, y_train, y_test = train_test_split(
             x,
             y,
-            test_size=0.2,
+            test_size=options.test_size,
             random_state=self.settings.random_state,
             stratify=stratify,
         )
@@ -165,16 +380,15 @@ class TabularAutoMLAdapter:
             ]
         )
 
+        estimator_kwargs = {
+            "n_estimators": 300,
+            "random_state": self.settings.random_state,
+            "n_jobs": options.cpu_limit,
+        }
         if task_type == "regression":
-            estimator = RandomForestRegressor(
-                n_estimators=300,
-                random_state=self.settings.random_state,
-            )
+            estimator = RandomForestRegressor(**estimator_kwargs)
         else:
-            estimator = RandomForestClassifier(
-                n_estimators=300,
-                random_state=self.settings.random_state,
-            )
+            estimator = RandomForestClassifier(**estimator_kwargs)
 
         pipeline = Pipeline(
             steps=[
@@ -197,7 +411,15 @@ class TabularAutoMLAdapter:
             y_reference=y_test,
             feature_names=feature_names,
         )
-
+        effective_options = self._effective_options(
+            options=options,
+            task_type=task_type,
+            backend="sklearn",
+            preset="sklearn-random-forest",
+            algos=["rf"],
+            cv_folds=None,
+            enable_forecast=forecasting_bundle is not None,
+        )
         bundle = {
             "pipeline": pipeline,
             "task_type": task_type,
@@ -211,8 +433,10 @@ class TabularAutoMLAdapter:
             "metrics": metrics,
             "primary_metric": primary_metric_name(task_type),
             "backend_name": "sklearn-fallback",
+            "preset_name": "sklearn-random-forest",
             "class_mapping": self._class_mapping(y),
             "preprocessor": tabular_preprocessor,
+            "forecasting": forecasting_bundle,
         }
 
         return TrainingResult(
@@ -220,8 +444,107 @@ class TabularAutoMLAdapter:
             feature_names=feature_names,
             metrics=metrics,
             bundle=bundle,
-            backend_name=bundle["backend_name"],
+            backend_name="sklearn-fallback",
+            training_options={"effective": effective_options},
+            warnings=[],
         )
+
+    def _build_forecasting_bundle(
+        self,
+        frame: pd.DataFrame,
+        target: str,
+        task_type: str,
+        options: TrainingOptions,
+    ) -> dict[str, Any] | None:
+        """Train an auxiliary forecasting head for temporal regression datasets."""
+        if task_type != "regression" or not options.enable_forecast:
+            return None
+        return build_forecasting_bundle(
+            frame=frame,
+            target=target,
+            random_state=self.settings.random_state,
+        )
+
+    @staticmethod
+    def _resolve_task_type(target: pd.Series, requested_task_type: str) -> str:
+        """Validate explicit task selection against the target column."""
+        if requested_task_type == "auto":
+            return DatasetService.infer_task_type(target)
+
+        cleaned = target.dropna()
+        unique_count = cleaned.nunique()
+        if requested_task_type == "binary":
+            if unique_count != 2:
+                raise ValueError("Binary task requires exactly two distinct target values.")
+            return "binary"
+
+        if requested_task_type == "multiclass":
+            if unique_count < 3:
+                raise ValueError("Multiclass task requires at least three distinct target values.")
+            return "multiclass"
+
+        if not pd.api.types.is_numeric_dtype(cleaned):
+            raise ValueError("Regression task requires a numeric target column.")
+        return "regression"
+
+    @staticmethod
+    def _sklearn_ignored_option_warnings(options: TrainingOptions) -> list[str]:
+        """Warn when user-selected LightAutoML options do not apply to sklearn."""
+        ignored = []
+        if options.preset != "tabular":
+            ignored.append("preset")
+        if options.algos != _default_lama_algos():
+            ignored.append("algos")
+        if options.cv_folds > 0:
+            ignored.append("cv_folds")
+        if options.timeout_seconds != 30:
+            ignored.append("timeout_seconds")
+        if not ignored:
+            return []
+        return [
+            "The selected sklearn backend ignores these LightAutoML-only options: "
+            + ", ".join(ignored)
+            + "."
+        ]
+
+    @staticmethod
+    def _effective_options(
+        options: TrainingOptions,
+        task_type: str,
+        backend: str,
+        preset: str,
+        algos: list[str],
+        cv_folds: int | None,
+        enable_forecast: bool,
+    ) -> dict[str, Any]:
+        """Return the actual training options used by the fitted model."""
+        return {
+            "task_type": task_type,
+            "backend": backend,
+            "preset": preset,
+            "algos": list(algos),
+            "timeout_seconds": options.timeout_seconds if backend == "lightautoml" else None,
+            "cpu_limit": options.cpu_limit,
+            "test_size": options.test_size,
+            "cv_folds": cv_folds,
+            "enable_forecast": enable_forecast,
+        }
+
+    @staticmethod
+    def _finalize_training_result(
+        result: TrainingResult,
+        requested_options: dict[str, Any],
+        warnings: list[str],
+    ) -> TrainingResult:
+        """Attach requested/effective options and warnings to the model bundle."""
+        result.training_options = {
+            "requested": requested_options,
+            "effective": result.training_options["effective"],
+        }
+        result.warnings.extend(warnings)
+        result.bundle["training_options"] = result.training_options
+        result.bundle["warnings"] = list(result.warnings)
+        return result
 
     def _estimate_feature_importance(
         self,
@@ -270,21 +593,29 @@ class TabularAutoMLAdapter:
         return {"numeric": numeric, "categorical": categorical}
 
     @staticmethod
-    def _class_mapping(target: pd.Series) -> dict[str, int] | None:
+    def _class_mapping(target: pd.Series) -> dict[Any, int] | None:
         """Return a deterministic label-to-index mapping for classification."""
         if target.nunique(dropna=True) < 2:
             return None
         unique = sorted(target.dropna().unique().tolist(), key=lambda value: str(value))
-        return {str(label): index for index, label in enumerate(unique)}
+        return {label: index for index, label in enumerate(unique)}
 
     @staticmethod
-    def _decode_lightautoml_predictions(automl, task_type: str, raw_predictions):
+    def _decode_lightautoml_predictions(
+        automl,
+        task_type: str,
+        raw_predictions,
+        fallback_class_mapping: dict[str, int] | None = None,
+    ):
         """Decode raw LightAutoML outputs into plain predictions and labels."""
         data = np.asarray(raw_predictions)
         if task_type == "regression":
             return data.reshape(-1), None
 
-        class_mapping = getattr(automl.reader, "class_mapping", None)
+        reader = getattr(automl, "reader", None)
+        class_mapping = getattr(reader, "class_mapping", None) if reader is not None else None
+        if class_mapping is None:
+            class_mapping = fallback_class_mapping
         reverse_mapping = None
         if class_mapping:
             reverse_mapping = {int(index): label for label, index in class_mapping.items()}
