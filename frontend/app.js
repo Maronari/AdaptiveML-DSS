@@ -1,6 +1,6 @@
 const DEFAULT_PROJECT_ID = "demo";
 const DEFAULT_CHART_HEIGHT = 520;
-const DEFAULT_INTERVAL_MINUTES = 30;
+const DEFAULT_INTERVAL_MINUTES = 120;
 const MIN_VISIBLE_POINTS = 8;
 const POINTS_PER_MINUTE = 12;
 const MAX_TOTAL_POINTS = 720;
@@ -8,6 +8,9 @@ const INTERVAL_PRESETS = [
   { label: "10 минут", minutes: 10 },
   { label: "30 минут", minutes: 30 },
   { label: "60 минут", minutes: 60 },
+  { label: "2 часа", minutes: 120 },
+  { label: "12 часов", minutes: 720 },
+  { label: "24 часа", minutes: 1440 },
 ];
 
 const state = {
@@ -51,6 +54,8 @@ const elements = {
   pointCountMin: document.getElementById("point-count-min"),
   pointCountMax: document.getElementById("point-count-max"),
   intervalButtons: Array.from(document.querySelectorAll(".interval-button")),
+  trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
 };
 
 function getRequestedContext() {
@@ -174,9 +179,10 @@ function getNearestIntervalPreset(minutes) {
   }, INTERVAL_PRESETS[0]).minutes;
 }
 
-function getAvailablePointCounts(intervalMinutes) {
-  const normalizedInterval = Math.max(1, Math.round(Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES));
-  const maxPointCount = Math.max(1, Math.min(MAX_TOTAL_POINTS, normalizedInterval * POINTS_PER_MINUTE));
+function getAvailablePointCounts(totalMinutes, baseFrequencyMinutes = DEFAULT_INTERVAL_MINUTES) {
+  const normalizedInterval = Math.max(1, Math.round(Number(totalMinutes) || DEFAULT_INTERVAL_MINUTES));
+  const normalizedBaseFrequency = Math.max(1, Math.round(Number(baseFrequencyMinutes) || DEFAULT_INTERVAL_MINUTES));
+  const maxPointCount = Math.max(1, Math.min(MAX_TOTAL_POINTS, Math.ceil(normalizedInterval / normalizedBaseFrequency)));
   const counts = [];
 
   for (let pointCount = 1; pointCount <= maxPointCount; pointCount += 1) {
@@ -224,7 +230,12 @@ function syncPointCountControls(intervalMinutes, preferredCount = null) {
     return;
   }
 
-  state.availablePointCounts = getAvailablePointCounts(intervalMinutes);
+  const baseFrequencyMinutes = Math.max(
+    1,
+    Number(state.model?.forecasting?.base_frequency_minutes) || Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES,
+  );
+  const totalMinutes = Math.max(intervalMinutes, Math.ceil(intervalMinutes / baseFrequencyMinutes) * baseFrequencyMinutes);
+  state.availablePointCounts = getAvailablePointCounts(totalMinutes, baseFrequencyMinutes);
   state.selectedPointCount = getNearestPointCount(state.availablePointCounts, preferredCount);
   updatePointCountControls();
 }
@@ -245,14 +256,15 @@ function getSliderPointCount() {
 
 function buildForecastRequest(model, intervalMinutes, pointCount) {
   const normalizedInterval = Math.max(1, Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES);
-  const availablePointCounts = getAvailablePointCounts(normalizedInterval);
-  const resolvedPointCount = getNearestPointCount(availablePointCounts, pointCount);
   const baseFrequency = Math.max(
     1,
     Number(model?.forecasting?.base_frequency_minutes) || Number(model?.forecasting?.default_horizon_minutes) || 30,
   );
-  const displayStepMinutes = Number((normalizedInterval / resolvedPointCount).toFixed(6));
   const backendSteps = Math.max(1, Math.ceil(normalizedInterval / baseFrequency));
+  const totalMinutes = backendSteps * baseFrequency;
+  const availablePointCounts = getAvailablePointCounts(totalMinutes, baseFrequency);
+  const resolvedPointCount = getNearestPointCount(availablePointCounts, pointCount);
+  const displayStepMinutes = Number((totalMinutes / resolvedPointCount).toFixed(6));
 
   return {
     intervalMinutes: normalizedInterval,
@@ -260,7 +272,7 @@ function buildForecastRequest(model, intervalMinutes, pointCount) {
     displayStepMinutes,
     backendHorizonMinutes: baseFrequency,
     backendSteps,
-    totalMinutes: normalizedInterval,
+    totalMinutes,
     pointCount: resolvedPointCount,
   };
 }
@@ -297,6 +309,27 @@ function updateLocation() {
   }
 
   window.history.replaceState({}, "", currentUrl);
+}
+
+function syncNavigation(projectId) {
+  for (const link of elements.trainingLinks) {
+    const targetUrl = new URL("./training.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.graphLinks) {
+    const targetUrl = new URL("./graph.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    if (state.model?.version_id) {
+      targetUrl.searchParams.set("model_version", state.model.version_id);
+    }
+    link.href = targetUrl.toString();
+  }
 }
 
 function resetViewport() {
@@ -364,90 +397,34 @@ function toTimestampMs(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function interpolatePrediction(anchors, timestampMs) {
-  if (!anchors.length) {
-    return null;
-  }
-
-  if (timestampMs <= anchors[0].timestampMs) {
-    return anchors[0].value;
-  }
-
-  for (let index = 0; index < anchors.length - 1; index += 1) {
-    const left = anchors[index];
-    const right = anchors[index + 1];
-    if (timestampMs <= right.timestampMs) {
-      const span = right.timestampMs - left.timestampMs;
-      if (span <= 0) {
-        return right.value;
-      }
-      const ratio = clamp((timestampMs - left.timestampMs) / span, 0, 1);
-      return left.value + (right.value - left.value) * ratio;
-    }
-  }
-
-  return anchors[anchors.length - 1].value;
-}
-
 function buildDisplayForecast(rawForecast, request) {
-  const recentHistory = Array.isArray(rawForecast?.recent_history) ? rawForecast.recent_history : [];
   const rawForecastRows = Array.isArray(rawForecast?.forecast) ? rawForecast.forecast : [];
   if (!request || !rawForecastRows.length) {
     return [];
   }
 
-  const anchors = [];
-  const historyTail = recentHistory[recentHistory.length - 1];
-  const historyTimestampMs = toTimestampMs(historyTail?.timestamp);
-  const historyValue = Number(historyTail?.target);
-  if (historyTail && historyTimestampMs !== null && Number.isFinite(historyValue)) {
-    anchors.push({
-      timestamp: historyTail.timestamp,
-      timestampMs: historyTimestampMs,
-      value: historyValue,
-    });
-  }
-
-  rawForecastRows.forEach((item) => {
-    const timestampMs = toTimestampMs(item.timestamp);
-    const prediction = Number(item.prediction);
-    if (timestampMs === null || !Number.isFinite(prediction)) {
-      return;
-    }
-    anchors.push({
-      timestamp: item.timestamp,
-      timestampMs,
-      value: prediction,
-    });
-  });
-
-  if (anchors.length < 2) {
-    return rawForecastRows.slice(0, request.pointCount).map((item, index) => ({
-      step: index + 1,
+  const sanitizedRows = rawForecastRows
+    .map((item, index) => ({
+      step: Number.isFinite(Number(item.step)) ? Number(item.step) : index + 1,
       timestamp: item.timestamp,
       prediction: Number(item.prediction),
-    }));
+    }))
+    .filter((item) => item.timestamp && Number.isFinite(item.prediction));
+
+  if (request.pointCount >= sanitizedRows.length) {
+    return sanitizedRows;
   }
 
-  const startTimestampMs = anchors[0].timestampMs;
-  const totalDurationMs = request.totalMinutes * 60 * 1000;
-  const displayRows = [];
-
-  for (let index = 1; index <= request.pointCount; index += 1) {
-    const timestampMs = startTimestampMs + (totalDurationMs * index) / request.pointCount;
-    const prediction = interpolatePrediction(anchors, timestampMs);
-    if (!Number.isFinite(prediction)) {
-      continue;
-    }
-
-    displayRows.push({
-      step: index,
-      timestamp: new Date(timestampMs).toISOString(),
-      prediction: Number(prediction.toFixed(6)),
-    });
+  const lastIndex = sanitizedRows.length - 1;
+  const selectedIndexes = new Set();
+  for (let position = 0; position < request.pointCount; position += 1) {
+    const ratio = request.pointCount === 1 ? 1 : position / (request.pointCount - 1);
+    selectedIndexes.add(Math.round(ratio * lastIndex));
   }
 
-  return displayRows;
+  return Array.from(selectedIndexes)
+    .sort((left, right) => left - right)
+    .map((index) => sanitizedRows[index]);
 }
 
 function applyDisplayPointCount(pointCount, { resetZoom = false } = {}) {
@@ -773,10 +750,10 @@ function drawForecastChart() {
   }));
   const historyPoints = pointLayouts.filter((item) => item.series === "history");
   const forecastPoints = pointLayouts.filter((item) => item.series === "forecast");
-  const firstForecastIndex = pointLayouts.findIndex((item) => item.series === "forecast");
+  const lastHistoryIndex = pointLayouts.map((item) => item.series).lastIndexOf("history");
 
-  if (firstForecastIndex > 0) {
-    const dividerX = getPointX(firstForecastIndex);
+  if (lastHistoryIndex >= 0) {
+    const dividerX = getPointX(lastHistoryIndex);
     context.strokeStyle = theme.divider;
     context.setLineDash([6, 6]);
     context.beginPath();
@@ -1062,7 +1039,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
   state.error = null;
   state.selectedIntervalMinutes = request.intervalMinutes;
   state.selectedPointCount = request.pointCount;
-  state.availablePointCounts = getAvailablePointCounts(request.intervalMinutes);
+  state.availablePointCounts = getAvailablePointCounts(request.totalMinutes, request.baseFrequencyMinutes);
   setInteractiveState();
   elements.forecastPanelNote.textContent = "Загружаю прогноз на нативной частоте модели...";
 
@@ -1103,6 +1080,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
 
 async function loadModelAndGraph() {
   const context = getRequestedContext();
+  syncNavigation(context.projectId);
   state.error = null;
   state.forecast = null;
   state.displayForecast = null;
@@ -1115,6 +1093,7 @@ async function loadModelAndGraph() {
       ? await fetchJson(`/models/${encodeURIComponent(context.versionId)}`)
       : await fetchJson(`/models/latest?project_id=${encodeURIComponent(context.projectId)}`);
     state.model = model;
+    syncNavigation(model.project_id);
   } catch (error) {
     state.model = null;
     state.error = error instanceof Error ? error.message : String(error);

@@ -8,6 +8,8 @@ const state = {
 const elements = {
   fileInput: document.getElementById("dataset-file"),
   projectIdInput: document.getElementById("project-id"),
+  trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   targetInput: document.getElementById("target-column"),
   taskTypeInput: document.getElementById("task-type"),
   backendInput: document.getElementById("training-backend"),
@@ -25,7 +27,15 @@ const elements = {
   trainButton: document.getElementById("train-button"),
   retrainButton: document.getElementById("retrain-button"),
   statusBanner: document.getElementById("status-banner"),
+  trainingLog: document.getElementById("training-log"),
 };
+
+function getPageContext() {
+  const searchParams = new URLSearchParams(window.location.search);
+  return {
+    projectId: searchParams.get("project_id")?.trim() || "",
+  };
+}
 
 function selectedAlgorithms() {
   return elements.algoInputs.filter((input) => input.checked).map((input) => input.value);
@@ -66,6 +76,39 @@ function setBusy(isBusy) {
 function setStatus(kind, message) {
   elements.statusBanner.className = `status-banner status-${kind}`;
   elements.statusBanner.textContent = message;
+}
+
+function timestampLabel() {
+  return new Date().toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function appendLog(message, level = "info") {
+  if (!elements.trainingLog) {
+    return;
+  }
+
+  const entry = document.createElement("div");
+  entry.className = "training-log-entry";
+  const time = document.createElement("strong");
+  time.textContent = timestampLabel();
+  const text = document.createElement("span");
+  text.textContent = message;
+  entry.append(time, text);
+  elements.trainingLog.prepend(entry);
+
+  while (elements.trainingLog.children.length > 12) {
+    elements.trainingLog.removeChild(elements.trainingLog.lastChild);
+  }
+
+  if (level === "error") {
+    console.error(`[training] ${message}`);
+  } else {
+    console.info(`[training] ${message}`);
+  }
 }
 
 function normalizeError(error) {
@@ -156,6 +199,7 @@ async function postFile(
   path,
   { file, projectId, target, includeTarget = false, trainingOptions = null, retrainingOptions = null },
 ) {
+  appendLog(`Отправляю запрос ${path} для проекта "${projectId}" и файла "${file?.name ?? "-"}".`);
   const formData = new FormData();
   formData.append("file", file);
   formData.append("project_id", projectId);
@@ -189,8 +233,10 @@ async function postFile(
   const payload = await readJsonResponse(response);
 
   if (!response.ok) {
+    appendLog(`Запрос ${path} завершился ошибкой: ${extractErrorMessage(payload, response)}`, "error");
     throw new Error(extractErrorMessage(payload, response));
   }
+  appendLog(`Запрос ${path} выполнен успешно.`);
   return payload;
 }
 
@@ -247,8 +293,28 @@ function preferredForecastSteps() {
   return Math.min(24, Math.max(8, Math.round(window.innerWidth / 120)));
 }
 
+function syncProjectNavigation(projectId) {
+  const normalizedProjectId = projectId.trim();
+
+  for (const link of elements.trainingLinks) {
+    const targetUrl = new URL("./training.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.graphLinks) {
+    const targetUrl = new URL("./graph.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+}
+
 function redirectToGraph(projectId, versionId, forecasting = null) {
-  const targetUrl = new URL("./index.html", window.location.href);
+  const targetUrl = new URL("./graph.html", window.location.href);
   targetUrl.searchParams.set("project_id", projectId);
   targetUrl.searchParams.set("model_version", versionId);
   if (forecasting?.available) {
@@ -264,8 +330,10 @@ async function runAction(actionName, action) {
   try {
     setBusy(true);
     setStatus("busy", actionName);
+    appendLog(actionName);
     await action();
   } catch (error) {
+    appendLog(normalizeError(error), "error");
     setStatus("error", normalizeError(error));
   } finally {
     setBusy(false);
@@ -274,6 +342,7 @@ async function runAction(actionName, action) {
 
 async function handleValidate() {
   const workflow = requireFileAndTarget();
+  appendLog(`Проверяю датасет "${workflow.file.name}" с target="${workflow.target}".`);
   state.validation = await postFile("/datasets/validate/file", {
     ...workflow,
     includeTarget: true,
@@ -283,6 +352,7 @@ async function handleValidate() {
 
 async function handleTrain() {
   const workflow = requireTrainingWorkflow();
+  appendLog(`Запускаю обучение для проекта "${workflow.projectId}" с target="${workflow.target}".`);
   state.training = await postFile("/training/run/file", {
     ...workflow,
     includeTarget: true,
@@ -299,6 +369,7 @@ async function handleTrain() {
 
 async function handleRetrain() {
   const workflow = requireRetrainingWorkflow();
+  appendLog(`Запускаю переобучение для проекта "${workflow.projectId}" с target="${workflow.target}".`);
   state.retraining = await postFile("/retraining/run/file", {
     ...workflow,
     includeTarget: true,
@@ -330,4 +401,15 @@ elements.backendInput.addEventListener("change", () => {
   syncTrainingControls();
 });
 
+elements.projectIdInput.addEventListener("input", () => {
+  syncProjectNavigation(elements.projectIdInput.value);
+});
+
+const pageContext = getPageContext();
+if (pageContext.projectId) {
+  elements.projectIdInput.value = pageContext.projectId;
+}
+
+syncProjectNavigation(elements.projectIdInput.value);
 syncTrainingControls();
+appendLog("Страница обучения готова.");

@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -6,6 +7,7 @@ from backend.schemas.api import (
     DatasetValidationRequest,
     DecisionRequest,
     ForecastRequest,
+    ProjectCreateRequest,
     PredictionComparisonRequest,
     PredictionRequest,
     RetrainRequest,
@@ -15,17 +17,20 @@ from backend.services.dataset_service import DatasetService
 from backend.services.decision_service import DecisionService
 from backend.services.explanation_service import ExplanationService
 from backend.services.prediction_service import PredictionService
+from backend.services.registry_service import RegistryService
 from backend.services.retraining_service import RetrainingService
 from backend.services.training_service import TrainingService
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 dataset_service = DatasetService()
 training_service = TrainingService()
 prediction_service = PredictionService()
 explanation_service = ExplanationService()
 decision_service = DecisionService()
 retraining_service = RetrainingService()
+registry_service = RegistryService()
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -37,6 +42,31 @@ def _bad_request(exc: Exception) -> HTTPException:
 def healthcheck() -> dict[str, str]:
     """Return a minimal liveness response for health checks."""
     return {"status": "ok"}
+
+
+@router.get("/projects", tags=["projects"])
+def list_projects() -> dict[str, Any]:
+    """Return existing projects enriched with training activity metadata."""
+    return {"items": registry_service.list_projects()}
+
+
+@router.post("/projects", tags=["projects"], status_code=status.HTTP_201_CREATED)
+def create_project(payload: ProjectCreateRequest) -> dict[str, Any]:
+    """Create a project entry before any dataset upload or training run."""
+    try:
+        project = registry_service.create_project(payload.name)
+        return project
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.delete("/projects/{project_id}", tags=["projects"])
+def delete_project(project_id: str) -> dict[str, Any]:
+    """Delete a project together with its datasets, models and stored artifacts."""
+    try:
+        return registry_service.delete_project(project_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.post("/datasets/validate", tags=["datasets"])
@@ -73,6 +103,13 @@ async def validate_dataset_file(
 def run_training(payload: TrainRequest) -> dict[str, Any]:
     """Train a model from inline records."""
     try:
+        logger.info(
+            "Training request started: project_id=%s target=%s rows=%s source=%s",
+            payload.project_id,
+            payload.target,
+            len(payload.records),
+            payload.source_name,
+        )
         return training_service.train(
             project_id=payload.project_id,
             target=payload.target,
@@ -81,6 +118,7 @@ def run_training(payload: TrainRequest) -> dict[str, Any]:
             training_options=payload.training_options.model_dump(),
         )
     except ValueError as exc:
+        logger.warning("Training request failed: project_id=%s error=%s", payload.project_id, exc)
         raise _bad_request(exc) from exc
 
 
@@ -101,7 +139,13 @@ async def run_training_file(
 ) -> dict[str, Any]:
     """Train a model from an uploaded dataset file."""
     try:
-        return await training_service.train_from_upload(
+        logger.info(
+            "Training upload started: project_id=%s target=%s filename=%s",
+            project_id,
+            target,
+            file.filename,
+        )
+        response = await training_service.train_from_upload(
             project_id=project_id,
             target=target,
             upload=file,
@@ -117,7 +161,15 @@ async def run_training_file(
                 "enable_forecast": enable_forecast,
             },
         )
+        logger.info(
+            "Training upload completed: project_id=%s model_version=%s backend=%s",
+            project_id,
+            response["model_version"]["version_id"],
+            response["backend"],
+        )
+        return response
     except ValueError as exc:
+        logger.warning("Training upload failed: project_id=%s error=%s", project_id, exc)
         raise _bad_request(exc) from exc
 
 

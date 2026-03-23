@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import re
+import shutil
 from typing import Any
 from uuid import uuid4
 
 import joblib
 import pandas as pd
 
-from backend.models.domain import DatasetVersion, ModelVersion
+from backend.models.domain import DatasetVersion, ModelVersion, ProjectRecord
 from backend.services.settings import get_settings
 from storage.registry.filesystem import FilesystemRegistry
 from storage.registry.sqlite import SQLiteRegistry
@@ -29,6 +31,7 @@ class RegistryService:
         frame: pd.DataFrame,
     ) -> DatasetVersion:
         """Persist a new dataset snapshot and register its metadata."""
+        self._ensure_project_record(project_id)
         version_id = self._new_version_id("dataset")
         project_dir = self.settings.datasets_dir / project_id
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +82,7 @@ class RegistryService:
         if promotion_mode not in {"auto", "candidate"}:
             raise ValueError("promotion_mode must be 'auto' or 'candidate'.")
 
+        self._ensure_project_record(project_id)
         models = self.registry.read("models")
         version_id = self._new_version_id("model")
         artifact_dir = self.settings.artifacts_dir / project_id / version_id
@@ -183,6 +187,143 @@ class RegistryService:
         self.registry.write("models", models)
         return ModelVersion(**selected)
 
+    def create_project(self, name: str) -> dict[str, Any]:
+        """Create a new project entry that can be selected before any training run."""
+        normalized_name = " ".join(name.split())
+        if not normalized_name:
+            raise ValueError("Project name must not be empty.")
+
+        projects = self.registry.read("projects")
+        existing_project_ids = {project["project_id"] for project in projects}
+        existing_project_ids.update(dataset["project_id"] for dataset in self.registry.read("datasets"))
+        existing_project_ids.update(model["project_id"] for model in self.registry.read("models"))
+
+        project_id = self._build_unique_project_id(normalized_name, existing_project_ids)
+        record = ProjectRecord(
+            project_id=project_id,
+            name=normalized_name,
+            created_at=self._now(),
+        )
+        projects.append(record.to_dict())
+        self.registry.write("projects", projects)
+        return record.to_dict()
+
+    def list_projects(self) -> list[dict[str, Any]]:
+        """Return project summaries aggregated from explicit records and registry activity."""
+        project_records = self.registry.read("projects")
+        datasets = self.registry.read("datasets")
+        models = self.registry.read("models")
+
+        projects_by_id: dict[str, dict[str, Any]] = {}
+
+        for record in project_records:
+            projects_by_id[record["project_id"]] = dict(record)
+
+        for dataset in datasets:
+            project = projects_by_id.setdefault(
+                dataset["project_id"],
+                {
+                    "project_id": dataset["project_id"],
+                    "name": dataset["project_id"],
+                    "created_at": dataset["created_at"],
+                },
+            )
+            project["created_at"] = min(project["created_at"], dataset["created_at"])
+
+        for model in models:
+            project = projects_by_id.setdefault(
+                model["project_id"],
+                {
+                    "project_id": model["project_id"],
+                    "name": model["project_id"],
+                    "created_at": model["created_at"],
+                },
+            )
+            project["created_at"] = min(project["created_at"], model["created_at"])
+
+        summaries: list[dict[str, Any]] = []
+        for project_id, record in projects_by_id.items():
+            project_datasets = [dataset for dataset in datasets if dataset["project_id"] == project_id]
+            project_models = [model for model in models if model["project_id"] == project_id]
+            latest_dataset = self._latest_by_created_at(project_datasets)
+            latest_model = self._latest_by_created_at(project_models)
+            champion_model = next(
+                (model for model in reversed(project_models) if model["status"] == "champion"),
+                None,
+            )
+            latest_activity_at = max(
+                [record["created_at"]]
+                + [dataset["created_at"] for dataset in project_datasets]
+                + [model["created_at"] for model in project_models]
+            )
+
+            summaries.append(
+                {
+                    "project_id": project_id,
+                    "name": record.get("name") or project_id,
+                    "created_at": record["created_at"],
+                    "latest_activity_at": latest_activity_at,
+                    "last_dataset_at": latest_dataset["created_at"] if latest_dataset else None,
+                    "last_trained_at": latest_model["created_at"] if latest_model else None,
+                    "dataset_versions": len(project_datasets),
+                    "model_versions": len(project_models),
+                    "target": (
+                        latest_model["target"]
+                        if latest_model
+                        else latest_dataset["target"] if latest_dataset else None
+                    ),
+                    "task_type": latest_model["task_type"] if latest_model else None,
+                    "latest_model_version_id": latest_model["version_id"] if latest_model else None,
+                    "champion_model_version_id": champion_model["version_id"] if champion_model else None,
+                    "has_models": bool(project_models),
+                    "has_champion_model": champion_model is not None,
+                    "status": champion_model["status"] if champion_model else "empty",
+                }
+            )
+
+        return sorted(summaries, key=lambda item: item["latest_activity_at"], reverse=True)
+
+    def delete_project(self, project_id: str) -> dict[str, Any]:
+        """Delete one project together with all related registry records and stored files."""
+        projects = self.registry.read("projects")
+        datasets = self.registry.read("datasets")
+        models = self.registry.read("models")
+        latest_comparison = self.registry.read("latest_comparison")
+
+        project_exists = any(project["project_id"] == project_id for project in projects)
+        dataset_records = [dataset for dataset in datasets if dataset["project_id"] == project_id]
+        model_records = [model for model in models if model["project_id"] == project_id]
+
+        if not project_exists and not dataset_records and not model_records:
+            raise ValueError(f"Project '{project_id}' was not found.")
+
+        self.registry.write(
+            "projects",
+            [project for project in projects if project["project_id"] != project_id],
+        )
+        self.registry.write(
+            "datasets",
+            [dataset for dataset in datasets if dataset["project_id"] != project_id],
+        )
+        self.registry.write(
+            "models",
+            [model for model in models if model["project_id"] != project_id],
+        )
+        self.registry.write(
+            "latest_comparison",
+            [item for item in latest_comparison if item.get("project_id") != project_id],
+        )
+
+        shutil.rmtree(self.settings.datasets_dir / project_id, ignore_errors=True)
+        shutil.rmtree(self.settings.artifacts_dir / project_id, ignore_errors=True)
+
+        return {
+            "project_id": project_id,
+            "deleted": True,
+            "dataset_versions_removed": len(dataset_records),
+            "model_versions_removed": len(model_records),
+        }
+
     @staticmethod
     def _primary_metric(task_type: str) -> str:
         """Choose the metric that decides champion promotion."""
@@ -222,9 +363,56 @@ class RegistryService:
 
     def _migrate_legacy_registry(self) -> None:
         """Import old JSON registry collections into SQLite on first access."""
-        for name in ("datasets", "models", "latest_comparison"):
+        for name in ("projects", "datasets", "models", "latest_comparison"):
             if self.registry.read(name):
                 continue
             legacy_payload = self.legacy_registry.read(name)
             if legacy_payload:
                 self.registry.write(name, legacy_payload)
+
+    def _ensure_project_record(self, project_id: str, name: str | None = None) -> dict[str, Any]:
+        """Ensure an explicit project record exists for the selected project id."""
+        projects = self.registry.read("projects")
+        for project in projects:
+            if project["project_id"] == project_id:
+                if name and project.get("name") != name:
+                    project["name"] = name
+                    self.registry.write("projects", projects)
+                return project
+
+        record = ProjectRecord(
+            project_id=project_id,
+            name=name or project_id,
+            created_at=self._now(),
+        )
+        projects.append(record.to_dict())
+        self.registry.write("projects", projects)
+        return record.to_dict()
+
+    @staticmethod
+    def _latest_by_created_at(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Return the most recent record according to its ISO timestamp."""
+        if not records:
+            return None
+        return max(records, key=lambda item: item["created_at"])
+
+    @classmethod
+    def _build_unique_project_id(cls, name: str, existing_ids: set[str]) -> str:
+        """Create a URL-safe project id and avoid collisions with existing project ids."""
+        base = cls._slugify_project_name(name)
+        if base not in existing_ids:
+            return base
+
+        suffix = 2
+        while f"{base}-{suffix}" in existing_ids:
+            suffix += 1
+        return f"{base}-{suffix}"
+
+    @staticmethod
+    def _slugify_project_name(name: str) -> str:
+        """Convert a display name into a lowercase project id."""
+        slug = name.casefold()
+        slug = slug.replace("ё", "е")
+        slug = re.sub(r"[^a-z0-9а-я]+", "-", slug)
+        slug = slug.strip("-")
+        return slug or "project"

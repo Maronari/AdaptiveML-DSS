@@ -28,6 +28,10 @@ class DatasetValidationRequest(BaseModel):
     records: list[dict[str, Any]]
 
 
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class TrainRequest(BaseModel):
     project_id: str = Field(default="default")
     target: str

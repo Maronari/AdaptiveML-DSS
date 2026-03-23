@@ -1,100 +1,44 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AdaptiveML DSS</title>
-    <link rel="stylesheet" href="./styles.css?v=20260322-2125" />
-  </head>
-  <body class="graph-page">
-    <main class="page-shell graph-shell">
-      <header class="app-header">
-        <div class="app-header-copy">
-          <p class="eyebrow">AdaptiveML DSS</p>
-          <h1>График модели</h1>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoML</title>
+    <link rel="stylesheet" href="./prototype/style.css?v=20260323-0210">
+    <link rel="stylesheet" href="./projects.css?v=20260323-0210">
+</head>
+<body>
+    <div class="top-bar">
+        <h1>AutoML</h1>
+        <div class="top-bar-actions">
+            <a href="./index.html" class="btn">Проекты</a>
+            <a href="./training.html" class="btn secondary">Обучение</a>
+            <a href="./graph.html" class="btn secondary">График</a>
         </div>
-        <div class="page-actions">
-          <a href="./training.html" class="button button-secondary">К обучению модели</a>
+    </div>
+    <p id="projectsStatus" class="page-status">Загружаю проекты...</p>
+
+    <div class="container" id="container"></div>
+
+    <div id="projectsEmpty" class="empty-state" hidden>
+        В реестре пока нет проектов. Создайте новый проект и перейдите к обучению.
+    </div>
+
+    <div class="modal" id="newProjectModal">
+        <div class="modal-content">
+            <h2>Новый проект</h2>
+            <div class="form-group">
+                <label for="projectName">Имя</label>
+                <input type="text" id="projectName" maxlength="120" placeholder="Имя проекта, например: Электроэнергия Март">
+            </div>
+            <p id="projectModalStatus" class="modal-status">Укажите название проекта. Идентификатор будет создан автоматически.</p>
+            <div class="modal-actions">
+                <button type="button" id="cancelProjectButton" class="btn secondary">Отмена</button>
+                <button type="button" id="createProjectButton" class="btn">Создать</button>
+            </div>
         </div>
-      </header>
+    </div>
 
-      <section class="workspace-board workspace-board-single graph-board">
-        <section class="graph-layout">
-          <aside class="panel graph-sidebar">
-            <div class="graph-sidebar-head">
-              <p class="eyebrow">Прогноз</p>
-              <h2 id="forecast-panel-title">Точки предсказания</h2>
-              <p id="forecast-panel-note" class="chart-range-note">
-                Выберите общий интервал прогноза. Количество точек задаётся ползунком, а шаг между ними пересчитывается автоматически.
-              </p>
-            </div>
-
-            <div class="graph-sidebar-actions">
-              <div class="interval-picker" aria-label="Интервал прогноза">
-                <button type="button" class="interval-button" data-interval-minutes="10">10 минут</button>
-                <button type="button" class="interval-button" data-interval-minutes="30">30 минут</button>
-                <button type="button" class="interval-button" data-interval-minutes="60">60 минут</button>
-              </div>
-
-              <label class="range-control" for="point-count-slider">
-                <div class="range-control-head">
-                  <span>Количество точек</span>
-                  <strong id="point-count-value">-</strong>
-                </div>
-                <input id="point-count-slider" class="point-range" type="range" min="0" max="0" step="1" value="0" />
-                <div class="range-control-scale">
-                  <span id="point-count-min">-</span>
-                  <span id="point-count-max">-</span>
-                </div>
-              </label>
-
-            </div>
-
-            <div class="prediction-table-shell table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Шаг</th>
-                    <th>Время</th>
-                    <th>Прогноз</th>
-                  </tr>
-                </thead>
-                <tbody id="prediction-table-body"></tbody>
-              </table>
-              <div id="prediction-table-empty" class="table-placeholder">
-                После загрузки прогноза здесь появятся точки предсказания.
-              </div>
-            </div>
-          </aside>
-
-          <section class="panel chart-panel chart-panel-expanded graph-main-panel">
-            <div class="chart-toolbar">
-              <div class="chart-toolbar-copy">
-                <p class="eyebrow">Модель</p>
-                <h2 id="chart-title">Прогноз модели</h2>
-                <p id="chart-range-note" class="chart-range-note">
-                  Страница показывает историю и прогноз выбранной версии модели.
-                </p>
-              </div>
-              <div class="chart-toolbar-actions">
-                <button type="button" id="chart-reset-button" class="button button-secondary button-compact" disabled>
-                  Сбросить масштаб
-                </button>
-              </div>
-            </div>
-
-            <div class="chart-frame chart-frame-large">
-              <canvas id="prediction-chart" height="520"></canvas>
-              <div id="chart-tooltip" class="chart-tooltip" hidden></div>
-              <div id="chart-empty-state" class="chart-empty-state">
-                Обучите временную регрессионную модель, чтобы открыть её прогноз.
-              </div>
-            </div>
-          </section>
-        </section>
-      </section>
-    </main>
-
-    <script type="module" src="./app.js?v=20260322-2145"></script>
-  </body>
+    <script type="module" src="./projects.js?v=20260323-0210"></script>
+</body>
 </html>

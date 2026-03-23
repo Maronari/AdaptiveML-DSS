@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes import router
@@ -34,6 +34,12 @@ app = FastAPI(
 def favicon() -> Response:
     """Return an empty favicon response to keep logs clean."""
     return Response(status_code=204)
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Redirect the bare app root to the frontend shell."""
+    return RedirectResponse(url="/app/")
 
 
 app.include_router(router)

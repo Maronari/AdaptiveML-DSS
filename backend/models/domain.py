@@ -20,6 +20,18 @@ class DatasetVersion:
 
 
 @dataclass(slots=True)
+class ProjectRecord:
+    """Metadata describing a user-visible project entry."""
+    project_id: str
+    name: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the dataclass into a plain dictionary."""
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ModelVersion:
     """Metadata describing one trained model artifact."""
     version_id: str

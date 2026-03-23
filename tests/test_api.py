@@ -2,6 +2,7 @@ import importlib
 import math
 import sys
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 import pandas as pd
@@ -101,6 +102,12 @@ def client(tmp_path, monkeypatch):
         "backend.api.routes",
         "backend.services.settings",
         "backend.services.registry_service",
+        "backend.services.dataset_service",
+        "backend.services.training_service",
+        "backend.services.prediction_service",
+        "backend.services.retraining_service",
+        "backend.services.decision_service",
+        "backend.services.explanation_service",
     ]:
         sys.modules.pop(module_name, None)
 
@@ -124,11 +131,85 @@ def test_favicon_returns_empty_response(client: TestClient):
     assert response.text == ""
 
 
+def test_root_redirects_to_frontend_shell(client: TestClient):
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code in {302, 307}
+    assert response.headers["location"] == "/app/"
+
+
 def test_frontend_app_served(client: TestClient):
     response = client.get("/app/")
     assert response.status_code == 200
-    assert "AdaptiveML DSS" in response.text
-    assert "prediction-chart" in response.text
+    assert "AutoML" in response.text
+    assert 'id="container"' in response.text
+    assert 'id="newProjectModal"' in response.text
+
+
+def test_projects_endpoint_lists_created_and_inferred_projects(client: TestClient):
+    create_response = client.post("/projects", json={"name": "Электроэнергия март"})
+    assert create_response.status_code == 201
+    created_project = create_response.json()
+    assert created_project["project_id"] == "электроэнергия-март"
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "projects-list-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert train_response.status_code == 200
+
+    list_response = client.get("/projects")
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    project_ids = {item["project_id"] for item in items}
+    assert "электроэнергия-март" in project_ids
+    assert "projects-list-demo" in project_ids
+
+    explicit_project = next(item for item in items if item["project_id"] == "электроэнергия-март")
+    inferred_project = next(item for item in items if item["project_id"] == "projects-list-demo")
+    assert explicit_project["has_models"] is False
+    assert inferred_project["has_models"] is True
+    assert inferred_project["model_versions"] >= 1
+
+
+def test_delete_project_removes_registry_records_and_storage(client: TestClient):
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "delete-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert train_response.status_code == 200
+    training_payload = train_response.json()
+
+    dataset_path = Path(training_payload["dataset_version"]["path"])
+    artifact_path = Path(training_payload["model_version"]["artifact_path"])
+    assert dataset_path.exists()
+    assert artifact_path.exists()
+
+    list_response = client.get("/projects")
+    assert list_response.status_code == 200
+    assert "delete-demo" in {item["project_id"] for item in list_response.json()["items"]}
+
+    delete_response = client.delete("/projects/delete-demo")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert delete_response.json()["dataset_versions_removed"] == 1
+    assert delete_response.json()["model_versions_removed"] == 1
+
+    list_after_delete = client.get("/projects")
+    assert list_after_delete.status_code == 200
+    assert "delete-demo" not in {item["project_id"] for item in list_after_delete.json()["items"]}
+
+    latest_model_response = client.get("/models/latest", params={"project_id": "delete-demo"})
+    assert latest_model_response.status_code == 400
+    assert not dataset_path.exists()
+    assert not artifact_path.exists()
 
 
 def test_training_prediction_and_decision_flow(client: TestClient):

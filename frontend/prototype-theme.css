@@ -1,0 +1,585 @@
+body.training-page,
+body.graph-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: white;
+    min-height: 100vh;
+    color: #2C3E50;
+    display: flex;
+    flex-direction: column;
+    padding: 30px 85px 80px;
+    gap: 40px;
+    overflow: visible;
+}
+
+body.graph-page {
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.training-page .page-shell,
+.graph-page .page-shell {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+}
+
+.graph-page .page-shell {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+}
+
+.training-shell,
+.graph-shell {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 28px;
+}
+
+.graph-shell {
+    height: 100%;
+    min-height: 0;
+}
+
+.training-page .app-header,
+.graph-page .app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.training-page .app-header-copy,
+.graph-page .app-header-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.training-page .app-header .eyebrow,
+.graph-page .app-header .eyebrow {
+    display: none;
+}
+
+.training-page .app-header-copy h1,
+.graph-page .app-header-copy h1 {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0;
+    color: #2C3E50;
+}
+
+.page-subtitle {
+    margin: 0;
+    color: #6B7280;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.training-page .page-actions,
+.graph-page .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
+.training-page .workspace-board,
+.graph-page .workspace-board {
+    gap: 24px;
+    padding: 40px;
+    border: 0;
+    border-radius: 20px;
+    background: #F8F9FA;
+    box-shadow: 0 20px 60px rgba(44, 62, 80, 0.1);
+}
+
+.graph-page .workspace-board {
+    min-height: 0;
+    height: 100%;
+}
+
+.training-page .training-board,
+.graph-page .graph-board {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 40px;
+}
+
+.graph-page .graph-board {
+    height: 100%;
+    overflow: hidden;
+}
+
+.training-page .panel,
+.graph-page .panel {
+    border: 2px solid #E5E7EB;
+    border-radius: 16px;
+    background: white;
+    box-shadow: none;
+}
+
+.training-page .training-panel {
+    max-width: none;
+    width: 100%;
+}
+
+.training-page .training-panel-compact {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 24px;
+    height: auto;
+    padding: 30px;
+    overflow: visible;
+}
+
+.training-page .training-panel-head {
+    gap: 18px;
+}
+
+.training-page .panel-heading,
+.graph-page .chart-toolbar-copy,
+.graph-page .graph-sidebar-head {
+    margin-bottom: 0;
+}
+
+.training-page .panel-heading h2,
+.graph-page .graph-sidebar-head h2,
+.graph-page .chart-toolbar-copy h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    color: #2C3E50;
+}
+
+.training-page .field,
+.graph-page .range-control {
+    gap: 8px;
+}
+
+.training-page .field span,
+.graph-page .range-control-head span,
+.graph-page .range-control-scale,
+.graph-page .chart-range-note,
+.training-page .field-note,
+.graph-page .table-placeholder,
+.graph-page .chart-empty-state,
+.graph-page .chart-tooltip span {
+    color: #6B7280;
+}
+
+.training-page .field input,
+.training-page .field select,
+.graph-page .range-control,
+.graph-page .interval-button,
+.graph-page .chart-frame,
+.graph-page .table-shell {
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+.training-page .field input,
+.training-page .field select {
+    min-height: 56px;
+    padding: 16px;
+    color: #2C3E50;
+    background: white;
+}
+
+.training-page .field input:focus,
+.training-page .field select:focus {
+    border-color: #2C3E50;
+    box-shadow: none;
+}
+
+.training-page .file-field input {
+    padding-block: 14px;
+}
+
+.training-page .training-form-grid {
+    gap: 18px;
+    padding-right: 0;
+    overflow: visible;
+}
+
+.training-page .toggle,
+.training-page .algo-chip {
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    background: white;
+}
+
+.training-page .toggle {
+    min-height: 56px;
+    padding: 16px;
+}
+
+.training-page .algo-chip {
+    min-height: 52px;
+    padding: 14px 16px;
+}
+
+.training-page .toggle:has(input:checked),
+.training-page .algo-chip:has(input:checked) {
+    border-color: #2C3E50;
+    background: #F8F9FA;
+}
+
+.button {
+    min-height: 44px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.button-primary {
+    border: 0;
+    color: white;
+    background: #2C3E50;
+    box-shadow: none;
+}
+
+.button-primary:hover {
+    background: #1e293b;
+}
+
+.button-secondary {
+    color: #374151;
+    border: 0;
+    background: #E5E7EB;
+    box-shadow: none;
+}
+
+.button-secondary:hover {
+    border-color: transparent;
+    background: #D1D5DB;
+}
+
+.training-page .app-header .button-secondary,
+.graph-page .app-header .button-secondary {
+    color: #374151;
+    border: 0;
+    background: #E5E7EB;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.training-page .app-header .button-secondary:hover,
+.graph-page .app-header .button-secondary:hover {
+    border-color: transparent;
+    background: #D1D5DB;
+}
+
+.training-page .app-header .button-primary,
+.graph-page .app-header .button-primary {
+    color: white;
+    border: 0;
+    background: #2C3E50;
+    box-shadow: none;
+}
+
+.training-page .app-header .button-primary:hover,
+.graph-page .app-header .button-primary:hover {
+    background: #1e293b;
+}
+
+.training-page .page-actions .button,
+.graph-page .page-actions .button {
+    min-width: 118px;
+}
+
+.training-page .training-action-strip {
+    gap: 12px;
+}
+
+.training-page .training-footer {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+
+.training-status-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.training-page .status-banner {
+    padding: 14px 16px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+}
+
+.training-page .status-idle {
+    color: #2C3E50;
+    border-color: #E5E7EB;
+    background: #F8F9FA;
+}
+
+.training-page .status-busy {
+    color: #8a5a12;
+    border-color: #F3D7A3;
+    background: #FFF4DD;
+}
+
+.training-page .status-success {
+    color: #1f4f8c;
+    border-color: #BFDBFE;
+    background: #EFF6FF;
+}
+
+.training-page .status-error {
+    color: #B42318;
+    border-color: #FECACA;
+    background: #FEF2F2;
+}
+
+.training-log {
+    display: grid;
+    gap: 8px;
+    max-height: 180px;
+    overflow: auto;
+    padding: 14px 16px;
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    background: white;
+}
+
+.training-log:empty::before {
+    content: "Журнал действий появится здесь после нажатия кнопок.";
+    color: #6B7280;
+}
+
+.training-log-entry {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #2C3E50;
+}
+
+.training-log-entry strong {
+    margin-right: 8px;
+    color: #6B7280;
+    font-weight: 600;
+}
+
+.graph-page .graph-layout {
+    grid-template-columns: minmax(420px, 520px) minmax(0, 1fr);
+    gap: 24px;
+    height: 100%;
+    min-height: 0;
+}
+
+.graph-page .graph-sidebar,
+.graph-page .graph-main-panel {
+    padding: 30px;
+}
+
+.graph-page .graph-sidebar {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 18px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.graph-page .graph-main-panel {
+    gap: 24px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.graph-page .interval-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.graph-page .interval-button {
+    min-height: 44px;
+    color: #374151;
+    background: white;
+}
+
+.graph-page .interval-button:hover {
+    border-color: #D1D5DB;
+    background: #F3F4F6;
+}
+
+.graph-page .interval-button.is-active {
+    color: white;
+    border-color: #2C3E50;
+    background: #2C3E50;
+    box-shadow: none;
+}
+
+.graph-page .range-control {
+    padding: 16px;
+    background: white;
+}
+
+.graph-page .range-control-head strong,
+.graph-page .chart-toolbar-copy h2,
+.graph-page .chart-tooltip strong {
+    color: #2C3E50;
+}
+
+.graph-page .prediction-table-shell {
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
+}
+
+.graph-page .prediction-table-shell table {
+    min-width: 100%;
+}
+
+.graph-page .table-shell {
+    background: white;
+}
+
+.graph-page .table-shell thead th {
+    background: #F8F9FA;
+    color: #2C3E50;
+}
+
+.graph-page .table-shell tbody tr:nth-child(even) {
+    background: #FAFAFA;
+}
+
+.graph-page .chart-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 0;
+}
+
+.graph-page .chart-frame {
+    min-height: 560px;
+    background: white;
+}
+
+.graph-page .chart-frame::before {
+    background: linear-gradient(180deg, rgba(248, 249, 250, 0.92), transparent);
+}
+
+.graph-page .chart-frame-large,
+.graph-page .chart-frame-large canvas {
+    min-height: 560px;
+    height: 560px;
+}
+
+.graph-page .chart-frame-large {
+    min-height: 0;
+    height: 100%;
+}
+
+.graph-page .chart-tooltip {
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(44, 62, 80, 0.12);
+}
+
+@media (max-width: 1400px) {
+    body.training-page,
+    body.graph-page {
+        padding: 30px 40px 60px;
+    }
+
+    .training-page .workspace-board,
+    .graph-page .workspace-board,
+    .training-page .training-board,
+    .graph-page .graph-board {
+        padding: 30px;
+    }
+}
+
+@media (max-width: 1100px) {
+    .graph-page .graph-layout,
+    .training-page .training-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .training-page .field-span-1,
+    .training-page .field-span-2,
+    .training-page .field-span-3,
+    .training-page .field-span-4 {
+        grid-column: 1 / -1;
+    }
+
+    .training-page .training-panel-head,
+    .graph-page .chart-toolbar {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 768px) {
+    body.training-page,
+    body.graph-page {
+        padding: 20px;
+        gap: 24px;
+    }
+
+    .training-page .app-header,
+    .graph-page .app-header {
+        flex-direction: column;
+    }
+
+    .training-page .page-actions,
+    .graph-page .page-actions,
+    .training-page .training-action-strip {
+        width: 100%;
+        justify-content: stretch;
+        grid-template-columns: 1fr;
+    }
+
+    .training-page .page-actions .button,
+    .graph-page .page-actions .button,
+    .training-page .training-action-strip .button {
+        width: 100%;
+    }
+
+    .training-page .workspace-board,
+    .graph-page .workspace-board,
+    .training-page .training-board,
+    .graph-page .graph-board,
+    .graph-page .graph-sidebar,
+    .graph-page .graph-main-panel,
+    .training-page .training-panel-compact {
+        padding: 20px;
+    }
+
+    .graph-page .interval-picker,
+    .training-page .algo-grid-compact {
+        grid-template-columns: 1fr;
+    }
+
+    .graph-page .chart-frame,
+    .graph-page .chart-frame-large,
+    .graph-page .chart-frame-large canvas {
+        min-height: 380px;
+        height: 380px;
+    }
+}

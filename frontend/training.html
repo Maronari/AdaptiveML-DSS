@@ -4,17 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Обучение модели</title>
-    <link rel="stylesheet" href="./styles.css?v=20260322-2000" />
+    <link rel="stylesheet" href="./styles.css?v=20260323-0300" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260323-0300" />
   </head>
   <body class="training-page">
     <main class="page-shell training-shell">
       <header class="app-header training-header">
         <div class="app-header-copy">
-          <p class="eyebrow">AdaptiveML DSS</p>
-          <h1>Обучение модели</h1>
+          <h1>AutoML</h1>
+          <p class="page-subtitle">Обучение и переобучение модели проекта</p>
         </div>
         <div class="page-actions">
-          <a href="./index.html" class="button button-secondary">К странице графика</a>
+          <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./training.html" class="button button-primary" data-nav-training>Обучение</a>
+          <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
         </div>
       </header>
 
@@ -161,12 +164,15 @@
             <div id="training-options-note" class="field-note">
               Пресет, алгоритмы, CV и таймаут применяются только к LightAutoML.
             </div>
-            <div id="status-banner" class="status-banner status-idle">Готово.</div>
+            <div class="training-status-stack">
+              <div id="status-banner" class="status-banner status-idle">Готово.</div>
+              <div id="training-log" class="training-log" aria-live="polite"></div>
+            </div>
           </div>
         </section>
       </section>
     </main>
 
-    <script type="module" src="./training.js?v=20260322-2000"></script>
+    <script type="module" src="./training.js?v=20260323-0300"></script>
   </body>
 </html>
