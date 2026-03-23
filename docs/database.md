@@ -49,7 +49,7 @@
 
 ```mermaid
 erDiagram
-    USERS ||--o{ PROJECTS : владеет
+    USERS ||--o{ PROJECTS : owns
 
     USERS {
         uuid user_id PK
@@ -75,12 +75,12 @@ erDiagram
 
 ```mermaid
 erDiagram
-    PROJECTS ||--o{ DATASET_VERSIONS : хранит
-    PROJECTS ||--o{ TRAINING_RUNS : содержит
-    PROJECTS ||--o{ MODEL_VERSIONS : хранит
-    DATASET_VERSIONS ||--o{ TRAINING_RUNS : подает_на_вход
-    DATASET_VERSIONS ||--o{ MODEL_VERSIONS : обучает_на
-    TRAINING_RUNS ||--|| MODEL_VERSIONS : порождает
+    PROJECTS ||--o{ DATASET_VERSIONS : stores
+    PROJECTS ||--o{ TRAINING_RUNS : contains
+    PROJECTS ||--o{ MODEL_VERSIONS : stores
+    DATASET_VERSIONS ||--o{ TRAINING_RUNS : input_for
+    DATASET_VERSIONS ||--o{ MODEL_VERSIONS : trains_for
+    TRAINING_RUNS ||--|| MODEL_VERSIONS : produces
 
     DATASET_VERSIONS {
         uuid dataset_version_id PK
@@ -134,9 +134,9 @@ erDiagram
 
 ```mermaid
 erDiagram
-    PROJECTS ||--o{ MODEL_DEPLOYMENTS : отслеживает
-    MODEL_VERSIONS ||--o{ MODEL_DEPLOYMENTS : активирует
-    MODEL_DEPLOYMENTS o|--o{ MODEL_DEPLOYMENTS : откат_от
+    PROJECTS ||--o{ MODEL_DEPLOYMENTS : tracks
+    MODEL_VERSIONS ||--o{ MODEL_DEPLOYMENTS : activates
+    MODEL_DEPLOYMENTS o|--o{ MODEL_DEPLOYMENTS : rollback_of
 
     MODEL_DEPLOYMENTS {
         uuid deployment_id PK

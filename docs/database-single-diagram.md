@@ -9,17 +9,17 @@
 
 ```mermaid
 erDiagram
-    USERS ||--o{ PROJECTS : владеет
-    PROJECTS ||--o{ DATASET_VERSIONS : хранит
-    PROJECTS ||--o{ TRAINING_RUNS : содержит
-    PROJECTS ||--o{ MODEL_VERSIONS : версионирует
-    PROJECTS ||--o{ MODEL_DEPLOYMENTS : активирует
+    USERS ||--o{ PROJECTS : owns
+    PROJECTS ||--o{ DATASET_VERSIONS : stores
+    PROJECTS ||--o{ TRAINING_RUNS : contains
+    PROJECTS ||--o{ MODEL_VERSIONS : versions
+    PROJECTS ||--o{ MODEL_DEPLOYMENTS : activates
 
-    DATASET_VERSIONS ||--o{ TRAINING_RUNS : подает_на_вход
-    DATASET_VERSIONS ||--o{ MODEL_VERSIONS : источник_для
-    TRAINING_RUNS ||--|| MODEL_VERSIONS : порождает
-    MODEL_VERSIONS ||--o{ MODEL_DEPLOYMENTS : разворачивается_как
-    MODEL_DEPLOYMENTS o|--o{ MODEL_DEPLOYMENTS : откат_от
+    DATASET_VERSIONS ||--o{ TRAINING_RUNS : input_for
+    DATASET_VERSIONS ||--o{ MODEL_VERSIONS : source_for
+    TRAINING_RUNS ||--|| MODEL_VERSIONS : produces
+    MODEL_VERSIONS ||--o{ MODEL_DEPLOYMENTS : deployed_as
+    MODEL_DEPLOYMENTS o|--o{ MODEL_DEPLOYMENTS : rollback_of
 
     USERS {
         uuid user_id PK
