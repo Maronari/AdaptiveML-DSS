@@ -1,0 +1,221 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: white;
+    min-height: 100vh;
+    color: #2C3E50;
+    display: flex;
+    flex-direction: column;
+    padding: 30px 85px 80px;
+    gap: 40px;
+}
+
+h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #2C3E50;
+    align-self: flex-start;
+}
+
+.container {
+    background: #F8F9FA;
+    border-radius: 20px;
+    padding: 50px 80px;
+    box-shadow: 0 20px 60px rgba(44, 62, 80, 0.1);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 130px 60px;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+@media (min-width: 1920px) {
+    .container {
+        grid-template-columns: repeat(4, 300px);
+        justify-content: center;
+        gap: 130px 60px;
+    }
+}
+
+@media (max-width: 1400px) {
+    .container {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 60px 40px;
+        padding: 50px 40px;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        padding: 20px;
+        gap: 20px;
+    }
+    .container {
+        padding: 30px 20px;
+        gap: 40px 20px;
+        grid-template-columns: 1fr;
+    }
+}
+
+.card {
+    width: 300px;
+    height: 350px;
+    border-radius: 16px;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(44, 62, 80, 0.15);
+}
+
+.new {
+    background: #FFE0B5;
+}
+
+.existing {
+    background: white;
+    border: 2px solid #E5E7EB;
+}
+
+.card h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #2C3E50;
+}
+
+.card p {
+    font-size: 14px;
+    color: #6B7280;
+    line-height: 1.5;
+    flex-grow: 1;
+}
+
+.btn {
+    background: #2C3E50;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    align-self: flex-start;
+}
+
+.btn:hover {
+    background: #1e293b;
+}
+
+.btn.secondary {
+    background: #E5E7EB;
+    color: #374151;
+}
+
+.btn.secondary:hover {
+    background: #D1D5DB;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(44, 62, 80, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    width: 100%;
+    max-width: 800px;
+    height: 350px;
+    border-radius: 20px;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    box-shadow: 0 30px 80px rgba(44, 62, 80, 0.4);
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-content h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #2C3E50;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+
+input {
+    flex: 1;
+    padding: 16px;
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    font-size: 16px;
+    transition: border-color 0.2s;
+}
+
+input:focus {
+    outline: none;
+    border-color: #2C3E50;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+    .modal-content {
+        height: auto;
+        max-height: 90vh;
+        padding: 30px 20px;
+    }
+}

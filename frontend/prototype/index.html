@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoML</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>AutoML</h1>
+
+    <div class="container" id="container">
+    </div>
+
+    <div class="modal" id="newProjectModal">
+        <div class="modal-content">
+            <h2>Новый проект</h2>
+            <div class="form-group">
+                <label for="projectName">Имя</label>
+                <input type="text" id="projectName" placeholder="Имя проекта, например: Электроэнергия Март">
+            </div>
+            <div class="modal-actions">
+                <button class="btn secondary" onclick="closeModal()">Отмена</button>
+                <button class="btn" onclick="createProject()">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js" defer></script>
+</body>
+</html>
