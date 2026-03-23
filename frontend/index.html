@@ -4,18 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoML</title>
-    <link rel="stylesheet" href="./prototype/style.css?v=20260323-0210">
-    <link rel="stylesheet" href="./projects.css?v=20260323-0210">
+    <link rel="stylesheet" href="./prototype/style.css?v=20260323-1542">
+    <link rel="stylesheet" href="./projects.css?v=20260323-1542">
 </head>
-<body>
-    <div class="top-bar">
-        <h1>AutoML</h1>
-        <div class="top-bar-actions">
-            <a href="./index.html" class="btn">Проекты</a>
-            <a href="./training.html" class="btn secondary">Обучение</a>
-            <a href="./graph.html" class="btn secondary">График</a>
+<body class="projects-page">
+    <header class="app-header projects-header">
+        <div class="app-header-copy">
+            <h1>AutoML</h1>
+            <p class="page-subtitle">Выбор проекта и переход к обучению или графику</p>
         </div>
-    </div>
+        <div class="page-actions">
+            <a href="./index.html" class="button button-primary">Проекты</a>
+            <a href="./training.html" class="button button-secondary">Обучение</a>
+            <a href="./graph.html" class="button button-secondary">График</a>
+        </div>
+    </header>
     <p id="projectsStatus" class="page-status">Загружаю проекты...</p>
 
     <div class="container" id="container"></div>
@@ -39,6 +42,6 @@
         </div>
     </div>
 
-    <script type="module" src="./projects.js?v=20260323-0210"></script>
+    <script type="module" src="./projects.js?v=20260323-1542"></script>
 </body>
 </html>

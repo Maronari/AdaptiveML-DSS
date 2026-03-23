@@ -636,6 +636,29 @@ def test_forecast_run_from_temporal_regression_dataset(client: TestClient):
     assert body["forecast"][0]["timestamp"] < body["forecast"][1]["timestamp"] < body["forecast"][2]["timestamp"]
 
 
+def test_forecast_returns_extended_recent_history_window(client: TestClient):
+    forecasting_dataset = build_forecasting_dataset(rows=120)
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "forecast-history-demo",
+            "target": "Электропотребление",
+            "records": forecasting_dataset,
+        },
+    )
+    assert train_response.status_code == 200
+    trained_model_version = train_response.json()["model_version"]["version_id"]
+
+    forecast_response = client.get(
+        f"/models/{trained_model_version}/forecast",
+        params={"steps": 3},
+    )
+    assert forecast_response.status_code == 200
+    body = forecast_response.json()
+    assert len(body["recent_history"]) == 120
+
+
 def test_retraining_all_history_activates_better_candidate(client: TestClient):
     dataset = build_retraining_dataset()
 

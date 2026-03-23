@@ -2,6 +2,7 @@ const DEFAULT_PROJECT_ID = "demo";
 const DEFAULT_CHART_HEIGHT = 520;
 const DEFAULT_INTERVAL_MINUTES = 120;
 const MIN_VISIBLE_POINTS = 8;
+const DEFAULT_VISIBLE_POINTS = 96;
 const POINTS_PER_MINUTE = 12;
 const MAX_TOTAL_POINTS = 720;
 const INTERVAL_PRESETS = [
@@ -83,6 +84,18 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function getDefaultViewportRange(totalPoints) {
+  if (!Number.isFinite(totalPoints) || totalPoints <= DEFAULT_VISIBLE_POINTS) {
+    return { start: 0, end: 1 };
+  }
+
+  const windowSize = clamp(DEFAULT_VISIBLE_POINTS / totalPoints, MIN_VISIBLE_POINTS / totalPoints, 1);
+  return {
+    start: 1 - windowSize,
+    end: 1,
+  };
+}
+
 function getThemeValue(name, fallback) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
@@ -131,6 +144,30 @@ function formatTimestamp(value) {
     hour: "2-digit",
     minute: "2-digit",
     second: includeSeconds ? "2-digit" : undefined,
+  });
+}
+
+function formatAxisTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatAxisDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
   });
 }
 
@@ -332,23 +369,28 @@ function syncNavigation(projectId) {
   }
 }
 
-function resetViewport() {
-  chartState.viewStart = 0;
-  chartState.viewEnd = 1;
+function resetViewport(totalPoints = getActiveItems().length) {
+  const viewport = getDefaultViewportRange(totalPoints);
+  chartState.viewStart = viewport.start;
+  chartState.viewEnd = viewport.end;
   chartState.pointerId = null;
   chartState.dragStartX = 0;
   chartState.dragOriginStart = 0;
-  chartState.dragWindow = 1;
+  chartState.dragWindow = viewport.end - viewport.start;
   chartState.isDragging = false;
   chartState.hoverPointId = null;
 }
 
 function isViewportReset() {
-  return chartState.viewStart <= 0.0001 && chartState.viewEnd >= 0.9999;
+  const viewport = getDefaultViewportRange(getActiveItems().length);
+  return (
+    Math.abs(chartState.viewStart - viewport.start) <= 0.0001 &&
+    Math.abs(chartState.viewEnd - viewport.end) <= 0.0001
+  );
 }
 
 function getPlotBounds(width, height) {
-  return { top: 52, right: width - 26, bottom: height - 46, left: 72 };
+  return { top: 52, right: width - 26, bottom: height - 68, left: 72 };
 }
 
 function getPointId(point) {
@@ -610,6 +652,28 @@ function drawLegend(context, entries, theme) {
   }
 }
 
+function buildXAxisTicks(items, maxTickCount = 6) {
+  if (!items.length) {
+    return [];
+  }
+
+  const tickCount = Math.max(2, Math.min(maxTickCount, items.length));
+  const lastIndex = items.length - 1;
+  const indexes = new Set();
+
+  for (let position = 0; position < tickCount; position += 1) {
+    const ratio = tickCount === 1 ? 0 : position / (tickCount - 1);
+    indexes.add(Math.round(ratio * lastIndex));
+  }
+
+  return Array.from(indexes)
+    .sort((left, right) => left - right)
+    .map((index) => ({
+      index,
+      item: items[index],
+    }));
+}
+
 function getActiveItems() {
   const history = Array.isArray(state.forecast?.recent_history)
     ? state.forecast.recent_history
@@ -737,6 +801,34 @@ function drawForecastChart() {
     context.fillText(formatNumber(value), 10, y + 4);
   }
 
+  const xTicks = buildXAxisTicks(visibleSlice.items, width < 900 ? 4 : 6);
+  xTicks.forEach(({ index, item }) => {
+    const x = bounds.left + (plotWidth * index) / Math.max(visibleSlice.items.length - 1, 1);
+
+    context.strokeStyle = theme.grid;
+    context.beginPath();
+    context.moveTo(x, bounds.top);
+    context.lineTo(x, bounds.bottom);
+    context.stroke();
+
+    context.strokeStyle = theme.axis;
+    context.beginPath();
+    context.moveTo(x, bounds.bottom);
+    context.lineTo(x, bounds.bottom + 6);
+    context.stroke();
+
+    context.fillStyle = theme.label;
+    setChartFont(context, 11, 500);
+    const timeLabel = formatAxisTime(item.timestamp);
+    const timeWidth = context.measureText(timeLabel).width;
+    context.fillText(timeLabel, x - timeWidth / 2, bounds.bottom + 22);
+
+    setChartFont(context, 10, 400);
+    const dateLabel = formatAxisDate(item.timestamp);
+    const dateWidth = context.measureText(dateLabel).width;
+    context.fillText(dateLabel, x - dateWidth / 2, bounds.bottom + 38);
+  });
+
   const getPointX = (index) =>
     bounds.left + (plotWidth * index) / Math.max(visibleSlice.items.length - 1, 1);
   const getPointY = (value) =>
@@ -811,12 +903,6 @@ function drawForecastChart() {
     context.stroke();
   });
 
-  context.fillStyle = theme.label;
-  setChartFont(context, 11, 500);
-  context.fillText(formatTimestamp(pointLayouts[0].timestamp), bounds.left, bounds.bottom + 20);
-  const endLabel = formatTimestamp(pointLayouts[pointLayouts.length - 1].timestamp);
-  context.fillText(endLabel, bounds.right - context.measureText(endLabel).width, bounds.bottom + 20);
-
   context.fillStyle = theme.text;
   setChartFont(context, 11, 600);
   const zoomText = `Масштаб: ${visibleSlice.zoomLevel}x`;
@@ -828,7 +914,7 @@ function drawForecastChart() {
     ` Интервал ${formatDuration(state.request.totalMinutes)}, точек ${state.request.pointCount}, ` +
     `шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг ${formatDuration(state.request.baseFrequencyMinutes)}.`;
   const interactionText = zoomEnabled
-    ? " Колесо мыши масштабирует график, перетаскивание двигает окно, наведение показывает значение точки."
+    ? " Колесо мыши масштабирует график, перетаскивание двигает окно влево и вправо, наведение показывает значение точки."
     : " Наведите на точку, чтобы увидеть значение.";
 
   elements.chartTitle.textContent = `Прогноз модели ${state.model.version_id}`;

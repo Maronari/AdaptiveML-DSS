@@ -12,7 +12,7 @@ from automl.evaluation.metrics import evaluate_predictions
 
 LAG_CANDIDATES = (1, 2, 3, 6, 12, 24, 48)
 ROLLING_CANDIDATES = (3, 6, 12, 24, 48)
-HISTORY_TAIL_ROWS = 48
+HISTORY_TAIL_ROWS = 240
 
 
 @dataclass(slots=True)

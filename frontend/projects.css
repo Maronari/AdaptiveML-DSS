@@ -1,15 +1,71 @@
-.top-bar {
+.projects-page .app-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 24px;
 }
 
-.top-bar-actions {
+.projects-page .app-header-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.projects-page .app-header-copy h1 {
+    margin: 0;
+}
+
+.projects-page .page-subtitle {
+    margin: 0;
+    color: #6B7280;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.projects-page .page-actions {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 12px;
+    align-items: center;
+}
+
+.projects-page .page-actions .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 118px;
+    min-height: 44px;
+    padding: 12px 24px;
+    border: 0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.projects-page .button-primary {
+    color: white;
+    background: #2C3E50;
+}
+
+.projects-page .button-primary:hover {
+    background: #1e293b;
+}
+
+.projects-page .button-secondary {
+    color: #374151;
+    background: #E5E7EB;
+}
+
+.projects-page .button-secondary:hover {
+    background: #D1D5DB;
 }
 
 .page-status {
@@ -121,11 +177,16 @@
 }
 
 @media (max-width: 768px) {
-    .top-bar {
+    .projects-page .app-header {
         flex-direction: column;
     }
 
-    .top-bar-actions {
+    .projects-page .page-actions {
         width: 100%;
+        justify-content: stretch;
+    }
+
+    .projects-page .page-actions .button {
+        flex: 1 1 100%;
     }
 }
