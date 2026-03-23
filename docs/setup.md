@@ -121,3 +121,39 @@ Windows:
 
 - API: `http://localhost:8000`
 - UI: `http://localhost:8000/app/`
+
+## Storage в Docker
+
+При запуске через `docker compose` runtime-storage разделён на два слоя:
+
+- metadata и `registry.sqlite3` живут в docker volume `api_storage`;
+- snapshot-ы датасетов и model artifacts пишутся в MinIO как S3-объекты.
+
+Это значит:
+
+- контейнер `api` больше не зависит от локального `./storage` для рабочих данных;
+- dataset/model artifacts переживают пересоздание `api`, пока жив volume `minio_data`;
+- registry metadata переживает пересоздание `api`, пока жив volume `api_storage`.
+
+Текущая конфигурация внутри контейнера:
+
+- `ADAPTIVEML_STORAGE_ROOT=/var/lib/adaptiveml/storage`
+- `ADAPTIVEML_OBJECT_STORAGE_BACKEND=minio`
+- `ADAPTIVEML_OBJECT_STORAGE_ENDPOINT=http://minio:9000`
+- bucket `adaptiveml-datasets` для dataset snapshot-ов
+- bucket `adaptiveml-artifacts` для model bundle-ов
+
+Полезные команды:
+
+```bash
+docker compose up -d api minio
+docker volume inspect adaptiveml-dss_api_storage
+docker volume inspect adaptiveml-dss_minio_data
+```
+
+Если нужно полностью сбросить runtime-storage контейнеров:
+
+```bash
+docker compose down
+docker volume rm adaptiveml-dss_api_storage adaptiveml-dss_minio_data
+```

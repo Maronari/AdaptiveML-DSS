@@ -1,16 +1,22 @@
 services:
   api:
-    image: python:3.13-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     working_dir: /app
     volumes:
       - ./:/app
-    command: >
-      bash -lc "bash scripts/setup_full_env.sh python3.13 &&
-      uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+      - api_storage:/var/lib/adaptiveml/storage
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      ADAPTIVEML_STORAGE_ROOT: /app/storage
+      ADAPTIVEML_STORAGE_ROOT: /var/lib/adaptiveml/storage
+      ADAPTIVEML_OBJECT_STORAGE_BACKEND: minio
+      ADAPTIVEML_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      ADAPTIVEML_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_SECRET_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
+      ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
       POSTGRES_HOST: postgres
-      MINIO_ENDPOINT: minio:9000
     ports:
       - "8000:8000"
     depends_on:
@@ -41,5 +47,6 @@ services:
       - minio_data:/data
 
 volumes:
+  api_storage:
   postgres_data:
   minio_data:

@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     random_state: int = 42
     storage_root: Path = Field(default=Path("storage"))
+    object_storage_backend: str = "filesystem"
+    object_storage_endpoint: str | None = None
+    object_storage_access_key: str = ""
+    object_storage_secret_key: str = ""
+    object_storage_region: str = "us-east-1"
+    object_storage_secure: bool = False
+    object_storage_datasets_bucket: str = "adaptiveml-datasets"
+    object_storage_artifacts_bucket: str = "adaptiveml-artifacts"
 
     model_config = SettingsConfigDict(env_prefix="ADAPTIVEML_", extra="ignore")
 

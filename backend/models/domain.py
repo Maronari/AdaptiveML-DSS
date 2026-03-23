@@ -13,6 +13,9 @@ class DatasetVersion:
     schema: dict[str, str]
     rows: int
     created_at: str
+    storage_backend: str = "filesystem"
+    bucket: str | None = None
+    object_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataclass into a plain dictionary."""
@@ -45,6 +48,9 @@ class ModelVersion:
     status: str
     feature_names: list[str]
     created_at: str
+    storage_backend: str = "filesystem"
+    bucket: str | None = None
+    object_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataclass into a plain dictionary."""

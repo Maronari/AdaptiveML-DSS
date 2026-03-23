@@ -6,10 +6,10 @@ import shutil
 from typing import Any
 from uuid import uuid4
 
-import joblib
 import pandas as pd
 
 from backend.models.domain import DatasetVersion, ModelVersion, ProjectRecord
+from backend.services.object_storage_service import ObjectStorageService
 from backend.services.settings import get_settings
 from storage.registry.filesystem import FilesystemRegistry
 from storage.registry.sqlite import SQLiteRegistry
@@ -21,6 +21,7 @@ class RegistryService:
         self.settings = get_settings()
         self.registry = SQLiteRegistry(self.settings.registry_db_path)
         self.legacy_registry = FilesystemRegistry(self.settings.registry_dir)
+        self.object_storage = ObjectStorageService()
         self._migrate_legacy_registry()
 
     def create_dataset_version(
@@ -33,21 +34,24 @@ class RegistryService:
         """Persist a new dataset snapshot and register its metadata."""
         self._ensure_project_record(project_id)
         version_id = self._new_version_id("dataset")
-        project_dir = self.settings.datasets_dir / project_id
-        project_dir.mkdir(parents=True, exist_ok=True)
-
-        dataset_path = project_dir / f"{version_id}.csv"
-        frame.to_csv(dataset_path, index=False)
+        storage_ref = self.object_storage.save_dataset_frame(
+            project_id=project_id,
+            version_id=version_id,
+            frame=frame,
+        )
 
         record = DatasetVersion(
             version_id=version_id,
             project_id=project_id,
             source_name=source_name,
             target=target,
-            path=str(dataset_path),
+            path=storage_ref.path,
             schema={column: str(dtype) for column, dtype in frame.dtypes.items()},
             rows=int(len(frame)),
             created_at=self._now(),
+            storage_backend=storage_ref.storage_backend,
+            bucket=storage_ref.bucket,
+            object_key=storage_ref.object_key,
         )
         datasets = self.registry.read("datasets")
         datasets.append(record.to_dict())
@@ -57,7 +61,7 @@ class RegistryService:
     def load_dataset_version_frame(self, version_id: str) -> pd.DataFrame:
         """Load the persisted frame for a dataset version id."""
         dataset = self.get_dataset_version(version_id)
-        return pd.read_csv(dataset["path"])
+        return self.object_storage.load_dataset_frame(dataset)
 
     def get_dataset_version(self, version_id: str) -> dict[str, Any]:
         """Return one dataset version record by id."""
@@ -85,11 +89,11 @@ class RegistryService:
         self._ensure_project_record(project_id)
         models = self.registry.read("models")
         version_id = self._new_version_id("model")
-        artifact_dir = self.settings.artifacts_dir / project_id / version_id
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-
-        artifact_path = artifact_dir / "model.joblib"
-        joblib.dump(bundle, artifact_path)
+        storage_ref = self.object_storage.save_model_bundle(
+            project_id=project_id,
+            version_id=version_id,
+            bundle=bundle,
+        )
 
         primary_metric = self._primary_metric(task_type)
         status = "candidate"
@@ -105,7 +109,7 @@ class RegistryService:
             version_id=version_id,
             project_id=project_id,
             dataset_version_id=dataset_version_id,
-            artifact_path=str(artifact_path),
+            artifact_path=storage_ref.path,
             task_type=task_type,
             target=target,
             metrics=metrics,
@@ -113,6 +117,9 @@ class RegistryService:
             status=status,
             feature_names=feature_names,
             created_at=self._now(),
+            storage_backend=storage_ref.storage_backend,
+            bucket=storage_ref.bucket,
+            object_key=storage_ref.object_key,
         )
         models.append(record.to_dict())
         self.registry.write("models", models)
@@ -125,13 +132,13 @@ class RegistryService:
         if champion is None:
             raise ValueError(f"No champion model found for project '{project_id}'.")
 
-        bundle = joblib.load(champion["artifact_path"])
+        bundle = self.object_storage.load_model_bundle(champion)
         return champion, bundle
 
     def get_latest_model_bundle(self, project_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """Load the latest model metadata and serialized bundle for a project."""
         latest = self.get_latest_model_version(project_id)
-        bundle = joblib.load(latest["artifact_path"])
+        bundle = self.object_storage.load_model_bundle(latest)
         return latest, bundle
 
     def get_model_version(self, version_id: str) -> dict[str, Any]:
@@ -145,7 +152,7 @@ class RegistryService:
     def get_model_bundle(self, version_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """Load a model version and its serialized bundle."""
         model = self.get_model_version(version_id)
-        bundle = joblib.load(model["artifact_path"])
+        bundle = self.object_storage.load_model_bundle(model)
         return model, bundle
 
     def get_latest_model_version(self, project_id: str) -> dict[str, Any]:
@@ -313,6 +320,11 @@ class RegistryService:
             "latest_comparison",
             [item for item in latest_comparison if item.get("project_id") != project_id],
         )
+
+        for dataset in dataset_records:
+            self.object_storage.delete_dataset(dataset)
+        for model in model_records:
+            self.object_storage.delete_model(model)
 
         shutil.rmtree(self.settings.datasets_dir / project_id, ignore_errors=True)
         shutil.rmtree(self.settings.artifacts_dir / project_id, ignore_errors=True)
