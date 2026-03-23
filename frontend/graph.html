@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS</title>
     <link rel="stylesheet" href="./styles.css?v=20260323-0305" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260323-0305" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260323-1638" />
   </head>
   <body class="graph-page">
     <main class="page-shell graph-shell">
@@ -34,14 +34,17 @@
             </div>
 
             <div class="graph-sidebar-actions">
-              <div class="interval-picker" aria-label="Интервал прогноза">
-                <button type="button" class="interval-button" data-interval-minutes="10">10 минут</button>
-                <button type="button" class="interval-button" data-interval-minutes="30">30 минут</button>
-                <button type="button" class="interval-button" data-interval-minutes="60">60 минут</button>
-                <button type="button" class="interval-button" data-interval-minutes="120">2 часа</button>
-                <button type="button" class="interval-button" data-interval-minutes="720">12 часов</button>
-                <button type="button" class="interval-button" data-interval-minutes="1440">24 часа</button>
-              </div>
+              <label class="range-control" for="interval-slider">
+                <div class="range-control-head">
+                  <span>Интервал прогноза</span>
+                  <strong id="interval-value">-</strong>
+                </div>
+                <input id="interval-slider" class="point-range interval-range" type="range" min="10" max="1440" step="10" value="120" />
+                <div class="range-control-scale">
+                  <span id="interval-min">10 минут</span>
+                  <span id="interval-max">24 часа</span>
+                </div>
+              </label>
 
               <label class="range-control" for="point-count-slider">
                 <div class="range-control-head">
@@ -101,6 +104,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260323-1545"></script>
+    <script type="module" src="./app.js?v=20260323-1638"></script>
   </body>
 </html>

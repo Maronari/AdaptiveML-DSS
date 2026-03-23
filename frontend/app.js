@@ -1,18 +1,13 @@
 const DEFAULT_PROJECT_ID = "demo";
 const DEFAULT_CHART_HEIGHT = 520;
 const DEFAULT_INTERVAL_MINUTES = 120;
+const MIN_INTERVAL_MINUTES = 10;
+const MAX_INTERVAL_MINUTES = 1440;
+const INTERVAL_STEP_MINUTES = 10;
 const MIN_VISIBLE_POINTS = 8;
 const DEFAULT_VISIBLE_POINTS = 96;
 const POINTS_PER_MINUTE = 12;
 const MAX_TOTAL_POINTS = 720;
-const INTERVAL_PRESETS = [
-  { label: "10 минут", minutes: 10 },
-  { label: "30 минут", minutes: 30 },
-  { label: "60 минут", minutes: 60 },
-  { label: "2 часа", minutes: 120 },
-  { label: "12 часов", minutes: 720 },
-  { label: "24 часа", minutes: 1440 },
-];
 
 const state = {
   model: null,
@@ -50,11 +45,14 @@ const elements = {
   forecastPanelNote: document.getElementById("forecast-panel-note"),
   predictionTableBody: document.getElementById("prediction-table-body"),
   predictionTableEmpty: document.getElementById("prediction-table-empty"),
+  intervalSlider: document.getElementById("interval-slider"),
+  intervalValue: document.getElementById("interval-value"),
+  intervalMin: document.getElementById("interval-min"),
+  intervalMax: document.getElementById("interval-max"),
   pointCountSlider: document.getElementById("point-count-slider"),
   pointCountValue: document.getElementById("point-count-value"),
   pointCountMin: document.getElementById("point-count-min"),
   pointCountMax: document.getElementById("point-count-max"),
-  intervalButtons: Array.from(document.querySelectorAll(".interval-button")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
@@ -202,19 +200,21 @@ function formatDuration(totalMinutes) {
 
 function getInitialIntervalMinutes(context, model) {
   if (Number.isFinite(context.intervalMinutes) && context.intervalMinutes > 0) {
-    return getNearestIntervalPreset(context.intervalMinutes);
+    return normalizeIntervalMinutes(context.intervalMinutes);
   }
 
   const defaultHorizon = Number(model?.forecasting?.default_horizon_minutes) || 30;
-  return getNearestIntervalPreset(defaultHorizon);
+  return normalizeIntervalMinutes(defaultHorizon);
 }
 
-function getNearestIntervalPreset(minutes) {
-  return INTERVAL_PRESETS.reduce((closest, preset) => {
-    const closestDelta = Math.abs(closest.minutes - minutes);
-    const currentDelta = Math.abs(preset.minutes - minutes);
-    return currentDelta < closestDelta ? preset : closest;
-  }, INTERVAL_PRESETS[0]).minutes;
+function normalizeIntervalMinutes(minutes) {
+  const numericMinutes = Number(minutes);
+  if (!Number.isFinite(numericMinutes) || numericMinutes <= 0) {
+    return DEFAULT_INTERVAL_MINUTES;
+  }
+
+  const rounded = Math.round(numericMinutes / INTERVAL_STEP_MINUTES) * INTERVAL_STEP_MINUTES;
+  return clamp(rounded, MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES);
 }
 
 function getAvailablePointCounts(totalMinutes, baseFrequencyMinutes = DEFAULT_INTERVAL_MINUTES) {
@@ -260,6 +260,21 @@ function updatePointCountControls() {
   elements.pointCountMax.textContent = hasOptions ? String(availableCounts[availableCounts.length - 1]) : "—";
 }
 
+function updateIntervalControls() {
+  const selectedInterval = normalizeIntervalMinutes(state.selectedIntervalMinutes);
+  elements.intervalSlider.min = String(MIN_INTERVAL_MINUTES);
+  elements.intervalSlider.max = String(MAX_INTERVAL_MINUTES);
+  elements.intervalSlider.step = String(INTERVAL_STEP_MINUTES);
+  elements.intervalSlider.value = String(selectedInterval);
+  elements.intervalValue.textContent = formatDuration(selectedInterval);
+  elements.intervalMin.textContent = formatDuration(MIN_INTERVAL_MINUTES);
+  elements.intervalMax.textContent = formatDuration(MAX_INTERVAL_MINUTES);
+}
+
+function getSliderIntervalMinutes() {
+  return normalizeIntervalMinutes(Number.parseInt(elements.intervalSlider.value || String(DEFAULT_INTERVAL_MINUTES), 10));
+}
+
 function syncPointCountControls(intervalMinutes, preferredCount = null) {
   if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) {
     state.availablePointCounts = [];
@@ -293,7 +308,7 @@ function getSliderPointCount() {
 }
 
 function buildForecastRequest(model, intervalMinutes, pointCount) {
-  const normalizedInterval = Math.max(1, Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES);
+  const normalizedInterval = normalizeIntervalMinutes(intervalMinutes);
   const baseFrequency = Math.max(
     1,
     Number(model?.forecasting?.base_frequency_minutes) || Number(model?.forecasting?.default_horizon_minutes) || 30,
@@ -533,14 +548,10 @@ async function fetchJson(url) {
 
 function setInteractiveState() {
   const disabled = state.isLoadingForecast || !state.model?.forecasting?.available;
+  elements.intervalSlider.disabled = disabled;
   elements.pointCountSlider.disabled = disabled || !state.availablePointCounts.length;
+  updateIntervalControls();
   updatePointCountControls();
-
-  for (const button of elements.intervalButtons) {
-    button.disabled = disabled;
-    const isActive = Number(button.dataset.intervalMinutes) === state.selectedIntervalMinutes;
-    button.classList.toggle("is-active", isActive);
-  }
 }
 
 function clearPredictionTable(message = "После загрузки прогноза здесь появятся точки предсказания.") {
@@ -1132,7 +1143,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
 
   state.isLoadingForecast = true;
   state.error = null;
-  state.selectedIntervalMinutes = request.intervalMinutes;
+  state.selectedIntervalMinutes = normalizeIntervalMinutes(request.intervalMinutes);
   state.selectedPointCount = request.pointCount;
   state.availablePointCounts = getAvailablePointCounts(request.totalMinutes, request.baseFrequencyMinutes);
   setInteractiveState();
@@ -1204,6 +1215,7 @@ async function loadModelAndGraph() {
   }
 
   state.selectedIntervalMinutes = getInitialIntervalMinutes(context, state.model);
+  updateIntervalControls();
   syncPointCountControls(state.selectedIntervalMinutes, context.pointCount);
   await loadForecast(state.selectedIntervalMinutes, state.selectedPointCount);
 }
@@ -1217,16 +1229,21 @@ elements.chartResetButton.addEventListener("click", () => {
   renderChart();
 });
 
-for (const button of elements.intervalButtons) {
-  button.addEventListener("click", async () => {
-    const intervalMinutes = Number(button.dataset.intervalMinutes);
-    if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0 || state.isLoadingForecast) {
-      return;
-    }
-    syncPointCountControls(intervalMinutes);
-    await loadForecast(intervalMinutes, state.selectedPointCount);
-  });
-}
+elements.intervalSlider.addEventListener("input", () => {
+  state.selectedIntervalMinutes = getSliderIntervalMinutes();
+  updateIntervalControls();
+});
+
+elements.intervalSlider.addEventListener("change", async () => {
+  const intervalMinutes = getSliderIntervalMinutes();
+  if (state.isLoadingForecast || !state.model?.forecasting?.available) {
+    return;
+  }
+
+  state.selectedIntervalMinutes = intervalMinutes;
+  syncPointCountControls(intervalMinutes);
+  await loadForecast(intervalMinutes, state.selectedPointCount);
+});
 
 elements.pointCountSlider.addEventListener("input", () => {
   const pointCount = getSliderPointCount();

@@ -191,7 +191,6 @@ body.graph-page {
 .training-page .field input,
 .training-page .field select,
 .graph-page .range-control,
-.graph-page .interval-button,
 .graph-page .chart-frame,
 .graph-page .table-shell {
     border: 2px solid #E5E7EB;
@@ -410,32 +409,13 @@ body.graph-page {
     overflow: hidden;
 }
 
-.graph-page .interval-picker {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.graph-page .interval-button {
-    min-height: 44px;
-    color: #374151;
-    background: white;
-}
-
-.graph-page .interval-button:hover {
-    border-color: #D1D5DB;
-    background: #F3F4F6;
-}
-
-.graph-page .interval-button.is-active {
-    color: white;
-    border-color: #2C3E50;
-    background: #2C3E50;
-    box-shadow: none;
-}
-
 .graph-page .range-control {
     padding: 16px;
     background: white;
+}
+
+.graph-page .interval-range {
+    accent-color: #2C3E50;
 }
 
 .graph-page .range-control-head strong,
@@ -571,7 +551,6 @@ body.graph-page {
         padding: 20px;
     }
 
-    .graph-page .interval-picker,
     .training-page .algo-grid-compact {
         grid-template-columns: 1fr;
     }
