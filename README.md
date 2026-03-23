@@ -293,6 +293,18 @@ python -m pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
+Запуск документации в Docker:
+
+```bash
+docker compose up -d docs
+```
+
+После старта документация доступна на:
+
+```text
+http://localhost:8002
+```
+
 Локальная PostgreSQL и миграции:
 
 ```bash

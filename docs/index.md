@@ -64,6 +64,12 @@ python -m pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
+Или поднять documentation-site в Docker:
+
+```bash
+docker compose up -d docs
+```
+
 Собрать статическую версию:
 
 ```bash

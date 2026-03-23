@@ -66,6 +66,18 @@ python -m pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
+Запуск документации в Docker:
+
+```bash
+docker compose up -d docs
+```
+
+После старта документация будет доступна на:
+
+```text
+http://localhost:8002
+```
+
 Сборка статической версии:
 
 ```bash
@@ -153,6 +165,7 @@ Windows:
 Полезные команды:
 
 ```bash
+docker compose up -d docs
 docker compose up -d api minio
 docker volume inspect adaptiveml-dss_api_storage
 docker volume inspect adaptiveml-dss_minio_data
@@ -162,6 +175,7 @@ docker volume inspect adaptiveml-dss_minio_data
 
 В `docker-compose.yml` настроены healthchecks для:
 
+- `docs` — проверка главной страницы MkDocs
 - `api` — проверка `GET /health`
 - `postgres` — `pg_isready`
 - `minio` — `GET /minio/health/live`

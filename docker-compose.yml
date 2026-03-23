@@ -1,4 +1,25 @@
 services:
+  docs:
+    image: squidfunk/mkdocs-material:9.6.22
+    working_dir: /docs
+    volumes:
+      - ./:/docs
+    command: serve -a 0.0.0.0:8000
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3).read()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   api:
     build:
       context: .
