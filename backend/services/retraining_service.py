@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 from fastapi import UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from automl.evaluation.metrics import evaluate_predictions, primary_metric_name
 from automl.lightautoml_backend.adapter import TabularAutoMLAdapter
@@ -209,7 +210,8 @@ class RetrainingService:
         frame = await self.dataset_service.read_uploaded_tabular(upload)
         records = frame.to_dict(orient="records")
         source_name = upload.filename or "uploaded.csv"
-        return self.retrain(
+        return await run_in_threadpool(
+            self.retrain,
             project_id=project_id,
             target=target,
             records=records,

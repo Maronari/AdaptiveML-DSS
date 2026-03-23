@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from automl.lightautoml_backend.adapter import TabularAutoMLAdapter
 from backend.services.dataset_service import DatasetService
@@ -83,7 +84,8 @@ class TrainingService:
         frame = await self.dataset_service.read_uploaded_tabular(upload)
         records = frame.to_dict(orient="records")
         source_name = upload.filename or "uploaded.csv"
-        return self.train(
+        return await run_in_threadpool(
+            self.train,
             project_id=project_id,
             target=target,
             records=records,
