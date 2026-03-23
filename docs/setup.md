@@ -122,6 +122,13 @@ Windows:
 - API: `http://localhost:8000`
 - UI: `http://localhost:8000/app/`
 
+Основные страницы UI:
+
+- `http://localhost:8000/app/index.html` — проекты
+- `http://localhost:8000/app/training.html` — обучение и переобучение
+- `http://localhost:8000/app/models.html?project_id=<project_id>` — история моделей
+- `http://localhost:8000/app/graph.html?project_id=<project_id>` — история и прогноз
+
 ## Storage в Docker
 
 При запуске через `docker compose` runtime-storage разделён на два слоя:
@@ -150,6 +157,35 @@ docker compose up -d api minio
 docker volume inspect adaptiveml-dss_api_storage
 docker volume inspect adaptiveml-dss_minio_data
 ```
+
+## Docker healthchecks
+
+В `docker-compose.yml` настроены healthchecks для:
+
+- `api` — проверка `GET /health`
+- `postgres` — `pg_isready`
+- `minio` — `GET /minio/health/live`
+
+Из-за этого `api` стартует только после того, как `postgres` и `minio` реально стали `healthy`.
+
+Проверить состояние можно так:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 api
+```
+
+## CI pipeline
+
+В репозитории настроен GitHub Actions pipeline:
+
+- `lint` — `ruff check backend automl frontend tests`
+- `pytest` — полный прогон `pytest -q` в `.venv`
+- `build-image` — сборка `Dockerfile.api`
+
+Workflow лежит в:
+
+- `.github/workflows/ci.yml`
 
 Если нужно полностью сбросить runtime-storage контейнеров:
 

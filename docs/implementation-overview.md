@@ -21,7 +21,9 @@
 - запускать контролируемое переобучение по новым размеченным данным;
 - строить локальные объяснения через `SHAP`;
 - формировать рекомендации через `Experta`;
-- хранить версии датасетов и моделей в файловом реестре;
+- хранить версии датасетов и моделей в registry c object-storage для artifacts;
+- сохранять holdout-предсказания и training diagnostics вместе с model version;
+- показывать историю моделей проекта и вручную переключать champion-версию через UI;
 - запускаться через API, CLI и smoke-скрипты;
 - генерировать HTML-отчёт с визуализацией.
 
@@ -112,7 +114,10 @@ Registry умеет:
 - сохранять новую версию датасета;
 - регистрировать новую модель;
 - выбирать `champion` модель проекта;
-- загружать serialised bundle через `joblib`.
+- загружать serialised bundle через `joblib`;
+- хранить holdout predictions и training artifacts рядом с metadata модели.
+
+В текущем runtime-варианте metadata живут в `registry.sqlite3`, а dataset/model artifacts могут лежать либо в локальном filesystem, либо в MinIO.
 
 ## Поддержка входных данных
 
@@ -210,12 +215,25 @@ ML-модуль получает данные не как файл и не ка�
 Реализованы следующие эндпоинты:
 
 - `GET /health`
+- `GET /projects`
+- `POST /projects`
+- `DELETE /projects/{project_id}`
+- `GET /projects/{project_id}/models`
+- `POST /projects/{project_id}/models/{version_id}/activate`
 - `POST /datasets/validate`
 - `POST /datasets/validate/file`
 - `POST /training/run`
 - `POST /training/run/file`
 - `POST /predictions/run`
 - `POST /predictions/run/file`
+- `POST /predictions/compare`
+- `POST /predictions/compare/file`
+- `POST /predictions/compare/file/schema`
+- `GET /predictions/compare/latest`
+- `GET /models/latest`
+- `GET /models/{version_id}`
+- `GET /models/{version_id}/forecast`
+- `POST /forecast/run`
 - `POST /explanations/run`
 - `POST /decision/run`
 

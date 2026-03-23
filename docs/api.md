@@ -6,6 +6,14 @@
 
 - `GET /health`
 
+### Проекты и модели
+
+- `GET /projects`
+- `POST /projects`
+- `DELETE /projects/{project_id}`
+- `GET /projects/{project_id}/models`
+- `POST /projects/{project_id}/models/{version_id}/activate`
+
 ### Валидация датасета
 
 - `POST /datasets/validate`
@@ -20,6 +28,17 @@
 
 - `POST /predictions/run`
 - `POST /predictions/run/file`
+- `POST /predictions/compare`
+- `POST /predictions/compare/file`
+- `POST /predictions/compare/file/schema`
+- `GET /predictions/compare/latest`
+
+### Модели и прогноз
+
+- `GET /models/latest`
+- `GET /models/{version_id}`
+- `GET /models/{version_id}/forecast`
+- `POST /forecast/run`
 
 ### Объяснение
 
@@ -69,7 +88,8 @@
 3. создаётся dataset version;
 4. запускается ML adapter;
 5. артефакт модели сериализуется в реестр;
-6. API возвращает метаданные модели и метрики.
+6. в metadata модели сохраняются holdout-предсказания и training artifacts;
+7. API возвращает метаданные модели и метрики.
 
 ### Загрузка файла
 
@@ -109,6 +129,30 @@
 4. модель выполняет предсказание;
 5. ответ нормализуется в формат API.
 
+## История моделей проекта
+
+`GET /projects/{project_id}/models`
+
+Возвращает облегчённую историю версий модели по проекту:
+
+- `status`, `is_latest`, `is_champion`
+- `metric_value` и `primary_metric`
+- связанный `dataset_version_id`
+- `holdout_rows`
+- `has_training_artifacts`
+
+`POST /projects/{project_id}/models/{version_id}/activate`
+
+Переключает выбранную версию в `champion`, а предыдущую активную версию переводит в `archived`.
+
+## Сводка по модели
+
+`GET /models/latest` и `GET /models/{version_id}` возвращают не только metadata модели, но и:
+
+- `holdout_predictions`
+- `training_artifacts`
+- summary по forecasting bundle
+
 ## Поток объяснения
 
 `POST /explanations/run`
@@ -138,6 +182,8 @@
 ```json
 {"status": "ok"}
 ```
+
+В `docker-compose.yml` этот endpoint используется как `healthcheck` для контейнера `api`.
 
 ## Ошибки
 
