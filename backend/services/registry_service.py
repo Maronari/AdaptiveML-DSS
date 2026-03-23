@@ -10,13 +10,16 @@ import pandas as pd
 from backend.models.domain import DatasetVersion, ModelVersion
 from backend.services.settings import get_settings
 from storage.registry.filesystem import FilesystemRegistry
+from storage.registry.sqlite import SQLiteRegistry
 
 
 class RegistryService:
     def __init__(self) -> None:
-        """Manage dataset and model versions in the filesystem registry."""
+        """Manage dataset and model versions in the SQLite-backed registry."""
         self.settings = get_settings()
-        self.registry = FilesystemRegistry(self.settings.registry_dir)
+        self.registry = SQLiteRegistry(self.settings.registry_db_path)
+        self.legacy_registry = FilesystemRegistry(self.settings.registry_dir)
+        self._migrate_legacy_registry()
 
     def create_dataset_version(
         self,
@@ -121,6 +124,12 @@ class RegistryService:
         bundle = joblib.load(champion["artifact_path"])
         return champion, bundle
 
+    def get_latest_model_bundle(self, project_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Load the latest model metadata and serialized bundle for a project."""
+        latest = self.get_latest_model_version(project_id)
+        bundle = joblib.load(latest["artifact_path"])
+        return latest, bundle
+
     def get_model_version(self, version_id: str) -> dict[str, Any]:
         """Return one model version record by id."""
         models = self.registry.read("models")
@@ -128,6 +137,31 @@ class RegistryService:
             if model["version_id"] == version_id:
                 return model
         raise ValueError(f"Model version '{version_id}' was not found.")
+
+    def get_model_bundle(self, version_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Load a model version and its serialized bundle."""
+        model = self.get_model_version(version_id)
+        bundle = joblib.load(model["artifact_path"])
+        return model, bundle
+
+    def get_latest_model_version(self, project_id: str) -> dict[str, Any]:
+        """Return the newest model version record for a project."""
+        models = self.registry.read("models")
+        for model in reversed(models):
+            if model["project_id"] == project_id:
+                return model
+        raise ValueError(f"No model versions found for project '{project_id}'.")
+
+    def save_latest_comparison(self, comparison: dict[str, Any]) -> None:
+        """Persist the latest compact comparison payload for the graph page."""
+        self.registry.write("latest_comparison", [comparison])
+
+    def get_latest_comparison(self) -> dict[str, Any]:
+        """Return the most recent compact comparison payload."""
+        comparisons = self.registry.read("latest_comparison")
+        if not comparisons:
+            raise ValueError("No comparison data found yet.")
+        return comparisons[-1]
 
     def activate_model_version(self, project_id: str, version_id: str) -> ModelVersion:
         """Mark the selected version as champion and archive the previous champion."""
@@ -185,3 +219,12 @@ class RegistryService:
     def _now() -> str:
         """Return the current UTC timestamp in ISO format."""
         return datetime.now(UTC).isoformat()
+
+    def _migrate_legacy_registry(self) -> None:
+        """Import old JSON registry collections into SQLite on first access."""
+        for name in ("datasets", "models", "latest_comparison"):
+            if self.registry.read(name):
+                continue
+            legacy_payload = self.legacy_registry.read(name)
+            if legacy_payload:
+                self.registry.write(name, legacy_payload)

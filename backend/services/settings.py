@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         """Return the directory that stores registry metadata files."""
         return self.storage_root / "registry"
 
+    @property
+    def registry_db_path(self) -> Path:
+        """Return the SQLite database path for registry metadata."""
+        return self.storage_root / "registry.sqlite3"
+
     def ensure_directories(self) -> None:
         """Create all required storage directories if they are missing."""
         for path in (

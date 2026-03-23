@@ -7,6 +7,7 @@ import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
 
+from automl.lightautoml_backend import adapter as lama_adapter
 from automl.lightautoml_backend.adapter import LIGHTAUTOML_AVAILABLE
 
 
@@ -62,6 +63,36 @@ def build_retraining_dataset(rows: int = 180) -> list[dict[str, float | str | in
     return dataset
 
 
+def build_hourly_energy_dataset() -> list[dict[str, float | int]]:
+    return [
+        {"Час": 0, "Температура": 18.0, "Потребление": 110.0},
+        {"Час": 4, "Температура": 17.5, "Потребление": 104.0},
+        {"Час": 8, "Температура": 19.2, "Потребление": 126.0},
+        {"Час": 12, "Температура": 23.1, "Потребление": 149.0},
+        {"Час": 16, "Температура": 24.6, "Потребление": 158.0},
+        {"Час": 20, "Температура": 21.4, "Потребление": 136.0},
+        {"Час": 1, "Температура": 17.8, "Потребление": 108.0},
+        {"Час": 5, "Температура": 17.1, "Потребление": 103.0},
+        {"Час": 9, "Температура": 20.3, "Потребление": 129.0},
+        {"Час": 13, "Температура": 23.7, "Потребление": 151.0},
+    ]
+
+
+def build_timestamped_energy_dataset() -> list[dict[str, float | int | str]]:
+    timestamps = pd.date_range("2024-01-01 00:00:00", periods=10, freq="4h")
+    dataset = []
+    for index, timestamp in enumerate(timestamps):
+        dataset.append(
+            {
+                "Дата": timestamp.isoformat(),
+                "Час": int(timestamp.hour),
+                "Температура": round(17.5 + index * 0.8, 1),
+                "Потребление": round(104.0 + index * 5.5, 1),
+            }
+        )
+    return dataset
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("ADAPTIVEML_STORAGE_ROOT", str(tmp_path / "storage"))
@@ -96,8 +127,8 @@ def test_favicon_returns_empty_response(client: TestClient):
 def test_frontend_app_served(client: TestClient):
     response = client.get("/app/")
     assert response.status_code == 200
-    assert "AdaptiveML DSS Studio" in response.text
-    assert "Training backend" in response.text
+    assert "AdaptiveML DSS" in response.text
+    assert "prediction-chart" in response.text
 
 
 def test_training_prediction_and_decision_flow(client: TestClient):
@@ -187,6 +218,31 @@ def test_training_with_explicit_sklearn_options(client: TestClient):
     assert body["warnings"]
 
 
+def test_training_auto_backend_falls_back_when_lightautoml_raises_value_error(client: TestClient, monkeypatch):
+    def failing_lightautoml(*args, **kwargs):
+        raise ValueError("synthetic LightAutoML failure")
+
+    monkeypatch.setattr(lama_adapter, "LIGHTAUTOML_AVAILABLE", True)
+    monkeypatch.setattr(lama_adapter.TabularAutoMLAdapter, "_train_with_lightautoml", failing_lightautoml)
+
+    response = client.post(
+        "/training/run",
+        json={
+            "project_id": "auto-fallback-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+            "training_options": {
+                "backend": "auto",
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["backend"] == "sklearn-fallback"
+    assert body["warnings"]
+    assert "synthetic LightAutoML failure" in body["warnings"][0]
+
+
 @pytest.mark.skipif(not LIGHTAUTOML_AVAILABLE, reason="LightAutoML is not available")
 def test_training_with_utilized_lightautoml_preset(client: TestClient):
     response = client.post(
@@ -250,6 +306,218 @@ def test_prediction_compare_from_xlsx_upload(client: TestClient):
     assert body["items"][0]["record"]["target"] in {0, 1}
     assert "prediction" in body["items"][0]
     assert body["metrics"]
+
+
+def test_compare_schema_accepts_matching_upload(client: TestClient):
+    dataset = build_hourly_energy_dataset()
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "schema-demo",
+            "target": "Потребление",
+            "records": dataset,
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = pd.DataFrame(dataset)
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/predictions/compare/file/schema",
+        files={
+            "file": (
+                "matching.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "schema-demo", "target": "Потребление"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["missing_features"] == []
+    assert body["target_matches_champion"] is True
+    assert "Час" in body["expected_features"]
+
+
+def test_compare_schema_reports_missing_features(client: TestClient):
+    dataset = build_hourly_energy_dataset()
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "schema-missing-demo",
+            "target": "Потребление",
+            "records": dataset,
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = pd.DataFrame(dataset).drop(columns=["Час"])
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/predictions/compare/file/schema",
+        files={
+            "file": (
+                "missing_hour.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "schema-missing-demo", "target": "Потребление"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is False
+    assert body["target_matches_champion"] is True
+    assert body["missing_features"] == ["Час"]
+    assert "Температура" in body["uploaded_columns"]
+
+
+def test_compare_schema_reports_source_datetime_column_instead_of_engineered_features(client: TestClient):
+    dataset = build_timestamped_energy_dataset()
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "schema-datetime-demo",
+            "target": "Потребление",
+            "records": dataset,
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = pd.DataFrame(dataset).drop(columns=["Дата"])
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/predictions/compare/file/schema",
+        files={
+            "file": (
+                "missing_datetime.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "schema-datetime-demo", "target": "Потребление"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is False
+    assert body["missing_inputs"] == ["Дата"]
+    assert body["missing_features"] == [
+        "Дата__ts",
+        "Дата__hour",
+        "Дата__dayofweek",
+        "Дата__month",
+    ]
+
+
+def test_latest_comparison_returns_most_recent_saved_payload(client: TestClient):
+    dataset = build_hourly_energy_dataset()
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "latest-graph-demo",
+            "target": "Потребление",
+            "records": dataset,
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = pd.DataFrame(dataset)
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    compare_response = client.post(
+        "/predictions/compare/file",
+        files={
+            "file": (
+                "latest.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "latest-graph-demo", "target": "Потребление"},
+    )
+    assert compare_response.status_code == 200
+
+    latest_response = client.get("/predictions/compare/latest")
+    assert latest_response.status_code == 200
+    body = latest_response.json()
+    assert body["project_id"] == "latest-graph-demo"
+    assert body["task_type"] == "regression"
+    assert body["rows"] == len(dataset)
+    assert body["saved_at"]
+    assert len(body["items"]) == len(dataset)
+    assert set(body["items"][0]) == {"actual", "prediction"}
+
+
+def test_latest_model_and_forecast_endpoints(client: TestClient):
+    forecasting_dataset = build_forecasting_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "model-api-demo",
+            "target": "Электропотребление",
+            "records": forecasting_dataset,
+        },
+    )
+    assert train_response.status_code == 200
+    trained_model_version = train_response.json()["model_version"]["version_id"]
+
+    latest_model_response = client.get("/models/latest", params={"project_id": "model-api-demo"})
+    assert latest_model_response.status_code == 200
+    latest_model = latest_model_response.json()
+    assert latest_model["version_id"] == trained_model_version
+    assert latest_model["forecasting"]["available"] is True
+    assert latest_model["project_id"] == "model-api-demo"
+
+    model_response = client.get(f"/models/{trained_model_version}")
+    assert model_response.status_code == 200
+    model_payload = model_response.json()
+    assert model_payload["version_id"] == trained_model_version
+    assert model_payload["target"] == "Электропотребление"
+
+    forecast_response = client.get(
+        f"/models/{trained_model_version}/forecast",
+        params={"steps": 5},
+    )
+    assert forecast_response.status_code == 200
+    forecast_payload = forecast_response.json()
+    assert forecast_payload["model_version"] == trained_model_version
+    assert forecast_payload["steps"] == 5
+    assert len(forecast_payload["recent_history"]) > 0
+    assert len(forecast_payload["forecast"]) == 5
 
 
 def test_forecast_run_from_temporal_regression_dataset(client: TestClient):

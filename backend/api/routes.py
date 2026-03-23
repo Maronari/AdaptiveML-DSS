@@ -241,6 +241,67 @@ async def compare_prediction_file(
         raise _bad_request(exc) from exc
 
 
+@router.post("/predictions/compare/file/schema", tags=["prediction"])
+async def inspect_compare_prediction_file_schema(
+    file: UploadFile = File(...),
+    target: str = Form(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Inspect whether an uploaded labeled file matches the champion model schema."""
+    try:
+        return await prediction_service.inspect_comparison_upload(
+            project_id=project_id,
+            target=target,
+            upload=file,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/predictions/compare/latest", tags=["prediction"])
+def get_latest_prediction_comparison() -> dict[str, Any]:
+    """Return the latest saved compact comparison payload."""
+    try:
+        return prediction_service.get_latest_comparison()
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/models/latest", tags=["models"])
+def get_latest_model(project_id: str = "default") -> dict[str, Any]:
+    """Return metadata for the newest stored model of the selected project."""
+    try:
+        return prediction_service.get_latest_model_summary(project_id=project_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/models/{version_id}", tags=["models"])
+def get_model(version_id: str) -> dict[str, Any]:
+    """Return metadata for one stored model version."""
+    try:
+        return prediction_service.get_model_summary(version_id=version_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/models/{version_id}/forecast", tags=["models"])
+def get_model_forecast(
+    version_id: str,
+    horizon_minutes: int | None = None,
+    steps: int | None = None,
+) -> dict[str, Any]:
+    """Return forecast data for a specific stored model version."""
+    try:
+        return prediction_service.forecast_model_version(
+            version_id=version_id,
+            horizon_minutes=horizon_minutes,
+            steps=steps,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/forecast/run", tags=["forecast"])
 def run_forecast(payload: ForecastRequest) -> dict[str, Any]:
     """Forecast future target values from the current champion model."""

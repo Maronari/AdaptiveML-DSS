@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS - Обучение модели</title>
+    <link rel="stylesheet" href="./styles.css?v=20260322-2000" />
+  </head>
+  <body class="training-page">
+    <main class="page-shell training-shell">
+      <header class="app-header training-header">
+        <div class="app-header-copy">
+          <p class="eyebrow">AdaptiveML DSS</p>
+          <h1>Обучение модели</h1>
+        </div>
+        <div class="page-actions">
+          <a href="./index.html" class="button button-secondary">К странице графика</a>
+        </div>
+      </header>
+
+      <section class="workspace-board workspace-board-single training-board">
+        <section class="panel training-panel training-panel-compact">
+          <div class="training-panel-head">
+            <div class="panel-heading training-panel-heading">
+              <p class="eyebrow">Параметры</p>
+              <h2>Запуск новой версии</h2>
+            </div>
+
+            <div class="training-action-strip">
+              <button type="button" id="validate-button" class="button button-secondary">Проверить</button>
+              <button type="button" id="train-button" class="button button-primary">Обучить</button>
+              <button type="button" id="retrain-button" class="button button-secondary">Переобучить</button>
+            </div>
+          </div>
+
+          <form id="workflow-form" class="training-form-grid">
+            <label class="field field-span-1">
+              <span>ID проекта</span>
+              <input id="project-id" name="project_id" value="demo" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Целевая колонка</span>
+              <input id="target-column" name="target" placeholder="Например: target" />
+            </label>
+
+            <label class="field file-field field-span-2">
+              <span>Файл датасета</span>
+              <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Тип задачи</span>
+              <select id="task-type" name="task_type">
+                <option value="auto" selected>Определить автоматически</option>
+                <option value="binary">Бинарная классификация</option>
+                <option value="multiclass">Мультиклассовая классификация</option>
+                <option value="regression">Регрессия</option>
+              </select>
+            </label>
+
+            <label class="field field-span-1">
+              <span>Бэкенд обучения</span>
+              <select id="training-backend" name="backend">
+                <option value="auto" selected>Выбрать автоматически</option>
+                <option value="lightautoml">LightAutoML</option>
+                <option value="sklearn">Резервный sklearn</option>
+              </select>
+            </label>
+
+            <label class="field field-span-1">
+              <span>Пресет</span>
+              <select id="training-preset" name="preset">
+                <option value="tabular" selected>TabularAutoML</option>
+                <option value="utilized">TabularUtilizedAutoML</option>
+              </select>
+            </label>
+
+            <label class="field field-span-1">
+              <span>Фолды CV</span>
+              <input id="cv-folds" name="cv_folds" type="number" min="0" value="0" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Таймаут, сек</span>
+              <input id="timeout-seconds" name="timeout_seconds" type="number" min="5" value="30" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Лимит CPU</span>
+              <input id="cpu-limit" name="cpu_limit" type="number" min="1" value="1" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Размер holdout</span>
+              <input id="test-size" name="test_size" type="number" min="0.05" max="0.95" step="0.05" value="0.20" />
+            </label>
+
+            <label class="field field-span-1">
+              <span>Окно переобучения</span>
+              <select id="retrain-history-scope" name="history_scope">
+                <option value="all_history" selected>Вся история + новый пакет</option>
+                <option value="last_30_days">Последние 30 дней + новый пакет</option>
+                <option value="last_60_days">Последние 60 дней + новый пакет</option>
+                <option value="last_90_days">Последние 90 дней + новый пакет</option>
+              </select>
+            </label>
+
+            <label class="field field-span-1">
+              <span>Мин. выгода, %</span>
+              <input
+                id="retrain-improvement-threshold"
+                name="minimum_relative_improvement_percent"
+                type="number"
+                min="0"
+                step="0.5"
+                value="3"
+              />
+            </label>
+
+            <div class="field field-span-2">
+              <span>Алгоритмы LightAutoML</span>
+              <div id="algo-options" class="algo-grid algo-grid-compact">
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="lgb" checked />
+                  <span>LightGBM</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="linear_l2" checked />
+                  <span>Linear L2</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="cb" />
+                  <span>CatBoost</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="xgb" />
+                  <span>XGBoost</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="rf" />
+                  <span>RandomForest</span>
+                </label>
+                <label class="algo-chip">
+                  <input type="checkbox" name="algo-option" value="nn" />
+                  <span>Neural Net</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field field-span-2">
+              <span>Политика активации</span>
+              <label class="toggle">
+                <input id="retrain-auto-activate" name="auto_activate" type="checkbox" checked />
+                <span>Активировать кандидата автоматически только при достижении порога выгоды</span>
+              </label>
+            </div>
+          </form>
+
+          <div class="training-footer">
+            <div id="training-options-note" class="field-note">
+              Пресет, алгоритмы, CV и таймаут применяются только к LightAutoML.
+            </div>
+            <div id="status-banner" class="status-banner status-idle">Готово.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./training.js?v=20260322-2000"></script>
+  </body>
+</html>

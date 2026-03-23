@@ -1,183 +1,476 @@
+const DEFAULT_PROJECT_ID = "demo";
+const DEFAULT_CHART_HEIGHT = 520;
+const DEFAULT_INTERVAL_MINUTES = 30;
+const MIN_VISIBLE_POINTS = 8;
+const POINTS_PER_MINUTE = 12;
+const MAX_TOTAL_POINTS = 720;
+const INTERVAL_PRESETS = [
+  { label: "10 минут", minutes: 10 },
+  { label: "30 минут", minutes: 30 },
+  { label: "60 минут", minutes: 60 },
+];
+
 const state = {
-  validation: null,
-  training: null,
-  retraining: null,
-  comparison: null,
+  model: null,
   forecast: null,
-  busy: false,
+  displayForecast: null,
+  error: null,
+  selectedIntervalMinutes: null,
+  selectedPointCount: null,
+  availablePointCounts: [],
+  request: null,
+  isLoadingForecast: false,
+  forecastToken: 0,
+};
+
+const chartState = {
+  viewStart: 0,
+  viewEnd: 1,
+  pointerId: null,
+  dragStartX: 0,
+  dragOriginStart: 0,
+  dragWindow: 1,
+  isDragging: false,
+  hoverPointId: null,
+  renderedPoints: [],
 };
 
 const elements = {
-  fileInput: document.getElementById("dataset-file"),
-  projectIdInput: document.getElementById("project-id"),
-  targetInput: document.getElementById("target-column"),
-  taskTypeInput: document.getElementById("task-type"),
-  backendInput: document.getElementById("training-backend"),
-  presetInput: document.getElementById("training-preset"),
-  cvFoldsInput: document.getElementById("cv-folds"),
-  timeoutSecondsInput: document.getElementById("timeout-seconds"),
-  cpuLimitInput: document.getElementById("cpu-limit"),
-  testSizeInput: document.getElementById("test-size"),
-  enableForecastInput: document.getElementById("enable-forecast"),
-  retrainHistoryScopeInput: document.getElementById("retrain-history-scope"),
-  retrainImprovementThresholdInput: document.getElementById("retrain-improvement-threshold"),
-  retrainAutoActivateInput: document.getElementById("retrain-auto-activate"),
-  algoInputs: Array.from(document.querySelectorAll('input[name="algo-option"]')),
-  trainingOptionsNote: document.getElementById("training-options-note"),
-  forecastMinutesInput: document.getElementById("forecast-minutes"),
-  forecastStepsInput: document.getElementById("forecast-steps"),
-  validateButton: document.getElementById("validate-button"),
-  trainButton: document.getElementById("train-button"),
-  retrainButton: document.getElementById("retrain-button"),
-  compareButton: document.getElementById("compare-button"),
-  forecastButton: document.getElementById("forecast-button"),
-  trainCompareButton: document.getElementById("train-compare-button"),
-  statusBanner: document.getElementById("status-banner"),
-  summaryCards: document.getElementById("summary-cards"),
-  datasetPreview: document.getElementById("dataset-preview"),
-  comparisonTable: document.getElementById("comparison-table"),
-  comparisonCanvas: document.getElementById("prediction-chart"),
-  comparisonChartEmptyState: document.getElementById("chart-empty-state"),
-  comparisonChartTitle: document.getElementById("chart-title"),
-  forecastCanvas: document.getElementById("forecast-chart"),
-  forecastChartEmptyState: document.getElementById("forecast-empty-state"),
-  forecastChartTitle: document.getElementById("forecast-chart-title"),
-  forecastTable: document.getElementById("forecast-table"),
-  forecastWarning: document.getElementById("forecast-warning"),
+  chartCanvas: document.getElementById("prediction-chart"),
+  chartEmptyState: document.getElementById("chart-empty-state"),
+  chartTooltip: document.getElementById("chart-tooltip"),
+  chartTitle: document.getElementById("chart-title"),
+  chartRangeNote: document.getElementById("chart-range-note"),
+  chartResetButton: document.getElementById("chart-reset-button"),
+  forecastPanelTitle: document.getElementById("forecast-panel-title"),
+  forecastPanelNote: document.getElementById("forecast-panel-note"),
+  predictionTableBody: document.getElementById("prediction-table-body"),
+  predictionTableEmpty: document.getElementById("prediction-table-empty"),
+  pointCountSlider: document.getElementById("point-count-slider"),
+  pointCountValue: document.getElementById("point-count-value"),
+  pointCountMin: document.getElementById("point-count-min"),
+  pointCountMax: document.getElementById("point-count-max"),
+  intervalButtons: Array.from(document.querySelectorAll(".interval-button")),
 };
 
-function selectedAlgorithms() {
-  return elements.algoInputs.filter((input) => input.checked).map((input) => input.value);
-}
+function getRequestedContext() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const requestedHorizon = Number.parseFloat(searchParams.get("horizon_minutes") || "");
+  const requestedInterval = Number.parseInt(searchParams.get("interval_minutes") || "", 10);
+  const requestedPointCount = Number.parseInt(searchParams.get("point_count") || searchParams.get("steps") || "", 10);
 
-function getWorkflowState() {
+  let intervalMinutes = null;
+  if (Number.isFinite(requestedInterval) && requestedInterval > 0) {
+    intervalMinutes = requestedInterval;
+  } else if (Number.isFinite(requestedHorizon) && requestedHorizon > 0) {
+    intervalMinutes = requestedHorizon;
+  }
+
   return {
-    file: elements.fileInput.files?.[0] ?? null,
-    projectId: elements.projectIdInput.value.trim() || "demo",
-    target: elements.targetInput.value.trim(),
-    trainingOptions: {
-      task_type: elements.taskTypeInput.value,
-      backend: elements.backendInput.value,
-      preset: elements.presetInput.value,
-      algos: selectedAlgorithms(),
-      timeout_seconds: Number.parseInt(elements.timeoutSecondsInput.value || "30", 10),
-      cpu_limit: Number.parseInt(elements.cpuLimitInput.value || "1", 10),
-      test_size: Number.parseFloat(elements.testSizeInput.value || "0.2"),
-      cv_folds: Number.parseInt(elements.cvFoldsInput.value || "0", 10),
-      enable_forecast: elements.enableForecastInput.checked,
-    },
-    retrainingOptions: {
-      history_scope: elements.retrainHistoryScopeInput.value,
-      minimum_relative_improvement:
-        Number.parseFloat(elements.retrainImprovementThresholdInput.value || "3") / 100,
-      auto_activate: elements.retrainAutoActivateInput.checked,
-    },
-    horizonMinutes: Number.parseInt(elements.forecastMinutesInput.value || "30", 10),
-    forecastSteps: Number.parseInt(elements.forecastStepsInput.value || "1", 10),
+    projectId: searchParams.get("project_id")?.trim() || DEFAULT_PROJECT_ID,
+    versionId: searchParams.get("model_version")?.trim() || "",
+    intervalMinutes,
+    pointCount: Number.isFinite(requestedPointCount) && requestedPointCount > 0 ? requestedPointCount : null,
   };
 }
 
-function setBusy(isBusy) {
-  state.busy = isBusy;
-  for (const button of [
-    elements.validateButton,
-    elements.trainButton,
-    elements.retrainButton,
-    elements.compareButton,
-    elements.forecastButton,
-    elements.trainCompareButton,
-  ]) {
-    button.disabled = isBusy;
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getThemeValue(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function getChartTheme() {
+  return {
+    background: getThemeValue("--chart-bg", "#ffffff"),
+    axis: getThemeValue("--chart-axis", "rgba(50, 70, 97, 0.24)"),
+    grid: getThemeValue("--chart-grid", "rgba(50, 70, 97, 0.1)"),
+    label: getThemeValue("--chart-label", "#7d8ca1"),
+    text: getThemeValue("--chart-text", "#243754"),
+    actual: getThemeValue("--chart-actual", "#324661"),
+    predicted: getThemeValue("--chart-predicted", "#3f7cff"),
+    divider: getThemeValue("--line-strong", "rgba(50, 70, 97, 0.28)"),
+  };
+}
+
+function setChartFont(context, size = 12, weight = 400) {
+  context.font = `${weight} ${size}px "Aptos", "Segoe UI Variable Text", "Trebuchet MS", sans-serif`;
+}
+
+function formatNumber(value, maximumFractionDigits = 3) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "—";
+  }
+
+  return numericValue.toLocaleString("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  });
+}
+
+function formatTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  const includeSeconds = date.getSeconds() !== 0 || date.getMilliseconds() !== 0;
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: includeSeconds ? "2-digit" : undefined,
+  });
+}
+
+function formatDuration(totalMinutes) {
+  const totalSeconds = Math.max(1, Math.round((Number(totalMinutes) || 0) * 60));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0 && hours === 0 && minutes === 0) {
+    return `${days} дн`;
+  }
+  if (days > 0 && minutes === 0 && seconds === 0) {
+    return `${days} дн ${hours} ч`;
+  }
+  if (hours > 0 && minutes === 0 && seconds === 0) {
+    return `${hours} ч`;
+  }
+  if (hours > 0 && seconds === 0) {
+    return `${hours} ч ${minutes} мин`;
+  }
+  if (minutes > 0 && seconds === 0) {
+    return `${minutes} мин`;
+  }
+  if (minutes > 0) {
+    return `${minutes} мин ${seconds} сек`;
+  }
+  return `${seconds} сек`;
+}
+
+function getInitialIntervalMinutes(context, model) {
+  if (Number.isFinite(context.intervalMinutes) && context.intervalMinutes > 0) {
+    return getNearestIntervalPreset(context.intervalMinutes);
+  }
+
+  const defaultHorizon = Number(model?.forecasting?.default_horizon_minutes) || 30;
+  return getNearestIntervalPreset(defaultHorizon);
+}
+
+function getNearestIntervalPreset(minutes) {
+  return INTERVAL_PRESETS.reduce((closest, preset) => {
+    const closestDelta = Math.abs(closest.minutes - minutes);
+    const currentDelta = Math.abs(preset.minutes - minutes);
+    return currentDelta < closestDelta ? preset : closest;
+  }, INTERVAL_PRESETS[0]).minutes;
+}
+
+function getAvailablePointCounts(intervalMinutes) {
+  const normalizedInterval = Math.max(1, Math.round(Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES));
+  const maxPointCount = Math.max(1, Math.min(MAX_TOTAL_POINTS, normalizedInterval * POINTS_PER_MINUTE));
+  const counts = [];
+
+  for (let pointCount = 1; pointCount <= maxPointCount; pointCount += 1) {
+    counts.push(pointCount);
+  }
+
+  return counts.length ? counts : [1];
+}
+
+function getNearestPointCount(availableCounts, preferredCount) {
+  if (!availableCounts.length) {
+    return 1;
+  }
+  if (!Number.isFinite(preferredCount) || preferredCount <= 0) {
+    return availableCounts[availableCounts.length - 1];
+  }
+
+  return availableCounts.reduce((closest, pointCount) => {
+    const closestDelta = Math.abs(closest - preferredCount);
+    const currentDelta = Math.abs(pointCount - preferredCount);
+    return currentDelta < closestDelta ? pointCount : closest;
+  }, availableCounts[0]);
+}
+
+function updatePointCountControls() {
+  const availableCounts = state.availablePointCounts;
+  const hasOptions = availableCounts.length > 0;
+  const selectedCount = hasOptions
+    ? getNearestPointCount(availableCounts, state.selectedPointCount)
+    : null;
+
+  elements.pointCountSlider.min = "0";
+  elements.pointCountSlider.max = String(Math.max(availableCounts.length - 1, 0));
+  elements.pointCountSlider.value = hasOptions ? String(availableCounts.indexOf(selectedCount)) : "0";
+  elements.pointCountValue.textContent = hasOptions ? String(selectedCount) : "—";
+  elements.pointCountMin.textContent = hasOptions ? String(availableCounts[0]) : "—";
+  elements.pointCountMax.textContent = hasOptions ? String(availableCounts[availableCounts.length - 1]) : "—";
+}
+
+function syncPointCountControls(intervalMinutes, preferredCount = null) {
+  if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) {
+    state.availablePointCounts = [];
+    state.selectedPointCount = null;
+    updatePointCountControls();
+    return;
+  }
+
+  state.availablePointCounts = getAvailablePointCounts(intervalMinutes);
+  state.selectedPointCount = getNearestPointCount(state.availablePointCounts, preferredCount);
+  updatePointCountControls();
+}
+
+function getSliderPointCount() {
+  const availableCounts = state.availablePointCounts;
+  if (!availableCounts.length) {
+    return null;
+  }
+
+  const sliderIndex = clamp(
+    Number.parseInt(elements.pointCountSlider.value || "0", 10),
+    0,
+    availableCounts.length - 1,
+  );
+  return availableCounts[sliderIndex];
+}
+
+function buildForecastRequest(model, intervalMinutes, pointCount) {
+  const normalizedInterval = Math.max(1, Number(intervalMinutes) || DEFAULT_INTERVAL_MINUTES);
+  const availablePointCounts = getAvailablePointCounts(normalizedInterval);
+  const resolvedPointCount = getNearestPointCount(availablePointCounts, pointCount);
+  const baseFrequency = Math.max(
+    1,
+    Number(model?.forecasting?.base_frequency_minutes) || Number(model?.forecasting?.default_horizon_minutes) || 30,
+  );
+  const displayStepMinutes = Number((normalizedInterval / resolvedPointCount).toFixed(6));
+  const backendSteps = Math.max(1, Math.ceil(normalizedInterval / baseFrequency));
+
+  return {
+    intervalMinutes: normalizedInterval,
+    baseFrequencyMinutes: baseFrequency,
+    displayStepMinutes,
+    backendHorizonMinutes: baseFrequency,
+    backendSteps,
+    totalMinutes: normalizedInterval,
+    pointCount: resolvedPointCount,
+  };
+}
+
+function isSameForecastRequest(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.intervalMinutes === right.intervalMinutes &&
+    left.displayStepMinutes === right.displayStepMinutes &&
+    left.backendHorizonMinutes === right.backendHorizonMinutes &&
+    left.backendSteps === right.backendSteps &&
+    left.pointCount === right.pointCount &&
+    left.baseFrequencyMinutes === right.baseFrequencyMinutes
+  );
+}
+
+function updateLocation() {
+  if (!state.model) {
+    return;
+  }
+
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.set("project_id", state.model.project_id);
+  currentUrl.searchParams.set("model_version", state.model.version_id);
+
+  if (state.request) {
+    currentUrl.searchParams.set("interval_minutes", String(state.request.intervalMinutes));
+    currentUrl.searchParams.set("point_count", String(state.request.pointCount));
+    currentUrl.searchParams.delete("horizon_minutes");
+    currentUrl.searchParams.delete("steps");
+  }
+
+  window.history.replaceState({}, "", currentUrl);
+}
+
+function resetViewport() {
+  chartState.viewStart = 0;
+  chartState.viewEnd = 1;
+  chartState.pointerId = null;
+  chartState.dragStartX = 0;
+  chartState.dragOriginStart = 0;
+  chartState.dragWindow = 1;
+  chartState.isDragging = false;
+  chartState.hoverPointId = null;
+}
+
+function isViewportReset() {
+  return chartState.viewStart <= 0.0001 && chartState.viewEnd >= 0.9999;
+}
+
+function getPlotBounds(width, height) {
+  return { top: 52, right: width - 26, bottom: height - 46, left: 72 };
+}
+
+function getPointId(point) {
+  return `${point.series}:${point.timestamp}`;
+}
+
+function hideTooltip() {
+  elements.chartTooltip.hidden = true;
+}
+
+function showTooltip(pointLayout) {
+  if (!pointLayout) {
+    hideTooltip();
+    return;
+  }
+
+  const tooltip = elements.chartTooltip;
+  tooltip.innerHTML = `<strong>${formatNumber(pointLayout.value)}</strong><span>${formatTimestamp(pointLayout.timestamp)}</span>`;
+  tooltip.hidden = false;
+
+  const frame = elements.chartCanvas.parentElement;
+  const frameRect = frame.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const left = clamp(pointLayout.x + 16, 12, frameRect.width - tooltipRect.width - 12);
+  const top = clamp(pointLayout.y - tooltipRect.height - 14, 12, frameRect.height - tooltipRect.height - 12);
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function clearHoverPoint({ rerender = true } = {}) {
+  if (chartState.hoverPointId === null) {
+    hideTooltip();
+    return;
+  }
+
+  chartState.hoverPointId = null;
+  hideTooltip();
+  if (rerender) {
+    renderChart();
   }
 }
 
-function setStatus(kind, message) {
-  elements.statusBanner.className = `status-banner status-${kind}`;
-  elements.statusBanner.textContent = message;
+function toTimestampMs(value) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+function interpolatePrediction(anchors, timestampMs) {
+  if (!anchors.length) {
+    return null;
+  }
+
+  if (timestampMs <= anchors[0].timestampMs) {
+    return anchors[0].value;
+  }
+
+  for (let index = 0; index < anchors.length - 1; index += 1) {
+    const left = anchors[index];
+    const right = anchors[index + 1];
+    if (timestampMs <= right.timestampMs) {
+      const span = right.timestampMs - left.timestampMs;
+      if (span <= 0) {
+        return right.value;
+      }
+      const ratio = clamp((timestampMs - left.timestampMs) / span, 0, 1);
+      return left.value + (right.value - left.value) * ratio;
+    }
+  }
+
+  return anchors[anchors.length - 1].value;
 }
 
-function normalizeError(error) {
-  if (error instanceof Error) {
-    return error.message;
+function buildDisplayForecast(rawForecast, request) {
+  const recentHistory = Array.isArray(rawForecast?.recent_history) ? rawForecast.recent_history : [];
+  const rawForecastRows = Array.isArray(rawForecast?.forecast) ? rawForecast.forecast : [];
+  if (!request || !rawForecastRows.length) {
+    return [];
   }
-  return String(error ?? "Unknown error");
+
+  const anchors = [];
+  const historyTail = recentHistory[recentHistory.length - 1];
+  const historyTimestampMs = toTimestampMs(historyTail?.timestamp);
+  const historyValue = Number(historyTail?.target);
+  if (historyTail && historyTimestampMs !== null && Number.isFinite(historyValue)) {
+    anchors.push({
+      timestamp: historyTail.timestamp,
+      timestampMs: historyTimestampMs,
+      value: historyValue,
+    });
+  }
+
+  rawForecastRows.forEach((item) => {
+    const timestampMs = toTimestampMs(item.timestamp);
+    const prediction = Number(item.prediction);
+    if (timestampMs === null || !Number.isFinite(prediction)) {
+      return;
+    }
+    anchors.push({
+      timestamp: item.timestamp,
+      timestampMs,
+      value: prediction,
+    });
+  });
+
+  if (anchors.length < 2) {
+    return rawForecastRows.slice(0, request.pointCount).map((item, index) => ({
+      step: index + 1,
+      timestamp: item.timestamp,
+      prediction: Number(item.prediction),
+    }));
+  }
+
+  const startTimestampMs = anchors[0].timestampMs;
+  const totalDurationMs = request.totalMinutes * 60 * 1000;
+  const displayRows = [];
+
+  for (let index = 1; index <= request.pointCount; index += 1) {
+    const timestampMs = startTimestampMs + (totalDurationMs * index) / request.pointCount;
+    const prediction = interpolatePrediction(anchors, timestampMs);
+    if (!Number.isFinite(prediction)) {
+      continue;
+    }
+
+    displayRows.push({
+      step: index,
+      timestamp: new Date(timestampMs).toISOString(),
+      prediction: Number(prediction.toFixed(6)),
+    });
+  }
+
+  return displayRows;
 }
 
-function formatMetricValue(value) {
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? String(value) : value.toFixed(4);
+function applyDisplayPointCount(pointCount, { resetZoom = false } = {}) {
+  if (!state.request) {
+    return;
   }
-  return String(value);
-}
 
-function requireFileAndTarget() {
-  const workflow = getWorkflowState();
-  if (!workflow.file) {
-    throw new Error("Select a CSV or XLSX file.");
-  }
-  if (!workflow.target) {
-    throw new Error("Provide the target column name.");
-  }
-  return workflow;
-}
+  const resolvedPointCount = getNearestPointCount(state.availablePointCounts, pointCount);
+  state.selectedPointCount = resolvedPointCount;
+  state.request = {
+    ...state.request,
+    pointCount: resolvedPointCount,
+    displayStepMinutes: Number((state.request.totalMinutes / resolvedPointCount).toFixed(6)),
+  };
+  state.displayForecast = buildDisplayForecast(state.forecast, state.request);
 
-function requireTrainingWorkflow() {
-  const workflow = requireFileAndTarget();
-  if (!Number.isFinite(workflow.trainingOptions.timeout_seconds) || workflow.trainingOptions.timeout_seconds < 5) {
-    throw new Error("Training timeout must be at least 5 seconds.");
+  if (resetZoom) {
+    resetViewport();
   }
-  if (!Number.isFinite(workflow.trainingOptions.cpu_limit) || workflow.trainingOptions.cpu_limit < 1) {
-    throw new Error("CPU limit must be at least 1.");
-  }
-  if (!Number.isFinite(workflow.trainingOptions.test_size)) {
-    throw new Error("Holdout test size must be a number.");
-  }
-  if (workflow.trainingOptions.test_size <= 0 || workflow.trainingOptions.test_size >= 1) {
-    throw new Error("Holdout test size must be greater than 0 and less than 1.");
-  }
-  if (!Number.isFinite(workflow.trainingOptions.cv_folds) || workflow.trainingOptions.cv_folds < 0) {
-    throw new Error("CV folds must be 0 for auto or a positive number.");
-  }
-  if (workflow.trainingOptions.cv_folds === 1) {
-    throw new Error("CV folds must be 0 for auto or at least 2.");
-  }
-  if (workflow.trainingOptions.backend !== "sklearn" && workflow.trainingOptions.algos.length === 0) {
-    throw new Error("Select at least one LightAutoML algorithm.");
-  }
-  return workflow;
-}
 
-function requireRetrainingWorkflow() {
-  const workflow = requireTrainingWorkflow();
-  if (!Number.isFinite(workflow.retrainingOptions.minimum_relative_improvement)) {
-    throw new Error("Minimum retraining profit must be a number.");
-  }
-  if (workflow.retrainingOptions.minimum_relative_improvement < 0) {
-    throw new Error("Minimum retraining profit must be greater than or equal to 0.");
-  }
-  return workflow;
-}
-
-function requireForecastParams() {
-  const workflow = getWorkflowState();
-  if (!workflow.projectId) {
-    throw new Error("Provide a project id.");
-  }
-  if (!Number.isFinite(workflow.horizonMinutes) || workflow.horizonMinutes < 1) {
-    throw new Error("Forecast horizon must be at least 1 minute.");
-  }
-  if (!Number.isFinite(workflow.forecastSteps) || workflow.forecastSteps < 1) {
-    throw new Error("Forecast steps must be at least 1.");
-  }
-  return workflow;
+  updatePointCountControls();
+  updateLocation();
+  renderAll();
 }
 
 async function readJsonResponse(response) {
@@ -185,302 +478,119 @@ async function readJsonResponse(response) {
   if (!text) {
     return null;
   }
+
   try {
     return JSON.parse(text);
   } catch {
-    return text;
+    return null;
   }
 }
 
-function extractErrorMessage(payload, response) {
-  if (payload && typeof payload === "object" && "detail" in payload) {
-    return payload.detail;
-  }
-  if (typeof payload === "string" && payload.trim()) {
-    return payload;
-  }
-  return response.statusText || "Request failed.";
-}
-
-async function postFile(
-  path,
-  { file, projectId, target, includeTarget = false, trainingOptions = null, retrainingOptions = null },
-) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("project_id", projectId);
-  if (includeTarget) {
-    formData.append("target", target);
-  }
-  if (trainingOptions) {
-    formData.append("task_type", trainingOptions.task_type);
-    formData.append("backend", trainingOptions.backend);
-    formData.append("preset", trainingOptions.preset);
-    formData.append("algos", trainingOptions.algos.join(","));
-    formData.append("timeout_seconds", String(trainingOptions.timeout_seconds));
-    formData.append("cpu_limit", String(trainingOptions.cpu_limit));
-    formData.append("test_size", String(trainingOptions.test_size));
-    formData.append("cv_folds", String(trainingOptions.cv_folds));
-    formData.append("enable_forecast", String(trainingOptions.enable_forecast));
-  }
-  if (retrainingOptions) {
-    formData.append("history_scope", retrainingOptions.history_scope);
-    formData.append(
-      "minimum_relative_improvement",
-      String(retrainingOptions.minimum_relative_improvement),
-    );
-    formData.append("auto_activate", String(retrainingOptions.auto_activate));
-  }
-
-  const response = await fetch(path, {
-    method: "POST",
-    body: formData,
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
   });
-  const payload = await readJsonResponse(response);
 
+  const payload = await readJsonResponse(response);
   if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, response));
+    const message =
+      payload && typeof payload === "object" && "detail" in payload ? payload.detail : response.statusText;
+    throw new Error(message || "Ошибка запроса.");
   }
+
   return payload;
 }
 
-async function postJson(path, payload) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+function setInteractiveState() {
+  const disabled = state.isLoadingForecast || !state.model?.forecasting?.available;
+  elements.pointCountSlider.disabled = disabled || !state.availablePointCounts.length;
+  updatePointCountControls();
+
+  for (const button of elements.intervalButtons) {
+    button.disabled = disabled;
+    const isActive = Number(button.dataset.intervalMinutes) === state.selectedIntervalMinutes;
+    button.classList.toggle("is-active", isActive);
+  }
+}
+
+function clearPredictionTable(message = "После загрузки прогноза здесь появятся точки предсказания.") {
+  elements.predictionTableBody.replaceChildren();
+  elements.predictionTableEmpty.hidden = false;
+  elements.predictionTableEmpty.textContent = message;
+}
+
+function renderPredictionTable() {
+  const rows = Array.isArray(state.displayForecast) ? state.displayForecast : [];
+  elements.predictionTableBody.replaceChildren();
+
+  if (!rows.length) {
+    clearPredictionTable(
+      state.error || "Для выбранной модели нет точек прогноза. Выберите другой интервал или обучите модель заново.",
+    );
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  rows.forEach((item) => {
+    const row = document.createElement("tr");
+
+    const stepCell = document.createElement("td");
+    stepCell.textContent = String(item.step);
+    row.append(stepCell);
+
+    const timeCell = document.createElement("td");
+    timeCell.textContent = formatTimestamp(item.timestamp);
+    row.append(timeCell);
+
+    const predictionCell = document.createElement("td");
+    predictionCell.textContent = formatNumber(item.prediction);
+    row.append(predictionCell);
+
+    fragment.append(row);
   });
-  const body = await readJsonResponse(response);
 
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(body, response));
-  }
-  return body;
+  elements.predictionTableBody.append(fragment);
+  elements.predictionTableEmpty.hidden = true;
 }
 
-function buildSummaryCards() {
-  const cards = [];
-
-  if (state.validation) {
-    cards.push({ label: "Rows", value: state.validation.rows });
-    cards.push({ label: "Columns", value: state.validation.columns.length });
-    cards.push({ label: "Task Type", value: state.validation.task_type });
-  }
-
-  if (state.training) {
-    const effectiveOptions = state.training.training_options?.effective ?? null;
-    cards.push({ label: "Backend", value: state.training.backend });
-    cards.push({ label: "Model Version", value: state.training.model_version.version_id });
-    if (effectiveOptions) {
-      cards.push({ label: "Task", value: effectiveOptions.task_type });
-      cards.push({ label: "Preset", value: effectiveOptions.preset });
-      cards.push({
-        label: "Algos",
-        value: effectiveOptions.algos?.length ? effectiveOptions.algos.join(", ") : "n/a",
-      });
-    }
-    cards.push({
-      label: "Forecast Head",
-      value: state.training.forecasting?.available ? "available" : "not available",
-    });
-    if (state.training.forecasting?.base_frequency_minutes) {
-      cards.push({
-        label: "Cadence",
-        value: `${state.training.forecasting.base_frequency_minutes} min`,
-      });
-    }
-    if (state.training.warnings?.length) {
-      cards.push({
-        label: "Warnings",
-        value: state.training.warnings.length,
-      });
-    }
-  }
-
-  if (state.retraining) {
-    const profit = state.retraining.evaluation?.profit ?? null;
-    cards.push({ label: "Current Model", value: state.retraining.current_model_version });
-    cards.push({
-      label: "Candidate Model",
-      value: state.retraining.candidate_model_version.version_id,
-    });
-    cards.push({
-      label: "History Scope",
-      value: state.retraining.selection_summary.history_scope,
-    });
-    cards.push({
-      label: "Eval Rows",
-      value: state.retraining.evaluation.rows,
-    });
-    cards.push({
-      label: "Activated",
-      value: state.retraining.activated ? "yes" : "no",
-    });
-    if (profit) {
-      cards.push({
-        label: `Current ${profit.primary_metric}`,
-        value: formatMetricValue(profit.current_value),
-      });
-      cards.push({
-        label: `Candidate ${profit.primary_metric}`,
-        value: formatMetricValue(profit.candidate_value),
-      });
-      cards.push({
-        label: "Profit",
-        value: `${formatMetricValue(profit.relative_gain_percent)}%`,
-      });
-    }
-  }
-
-  if (state.comparison) {
-    cards.push({ label: "Compared Rows", value: state.comparison.rows });
-    for (const [name, value] of Object.entries(state.comparison.metrics ?? {})) {
-      cards.push({ label: name, value: formatMetricValue(value) });
-    }
-  }
-
-  if (state.forecast) {
-    cards.push({
-      label: "Forecast Horizon",
-      value: `${state.forecast.requested_horizon_minutes} min`,
-    });
-    cards.push({
-      label: "Forecast Steps",
-      value: state.forecast.steps,
-    });
-    const firstPoint = state.forecast.forecast?.[0];
-    if (firstPoint) {
-      cards.push({
-        label: "Next Value",
-        value: formatMetricValue(firstPoint.prediction),
-      });
-    }
-  }
-
-  if (cards.length === 0) {
-    elements.summaryCards.innerHTML = `
-      <article class="summary-card summary-card-empty">
-        <span>Run validate, train, compare, or forecast to populate this panel.</span>
-      </article>
-    `;
+function updateSidebarInfo() {
+  if (state.error) {
+    elements.forecastPanelTitle.textContent = "Точки предсказания";
+    elements.forecastPanelNote.textContent = state.error;
     return;
   }
 
-  elements.summaryCards.innerHTML = cards
-    .map(
-      (card) => `
-        <article class="summary-card">
-          <div class="summary-card-label">${escapeHtml(card.label)}</div>
-          <div class="summary-card-value">${escapeHtml(card.value)}</div>
-        </article>
-      `,
-    )
-    .join("");
-}
-
-function renderTable(container, rows, columns, options = {}) {
-  const visibleRows = rows.slice(0, options.limit ?? rows.length);
-  if (!visibleRows.length || !columns.length) {
-    container.className = "table-shell table-placeholder";
-    container.textContent = options.emptyText ?? "No data to display.";
+  if (!state.model) {
+    elements.forecastPanelTitle.textContent = "Точки предсказания";
+    elements.forecastPanelNote.textContent = "Сначала обучите модель, чтобы открыть прогноз и таблицу точек.";
     return;
   }
 
-  const headerHtml = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
-  const bodyHtml = visibleRows
-    .map((row) => {
-      const cells = columns
-        .map((column) => {
-          const value = row[column];
-          const rendered =
-            column === "confidence" && value !== null && value !== undefined
-              ? `<span class="confidence-pill">${escapeHtml(formatMetricValue(value))}</span>`
-              : escapeHtml(value ?? "-");
-          return `<td>${rendered}</td>`;
-        })
-        .join("");
-      return `<tr>${cells}</tr>`;
-    })
-    .join("");
-
-  container.className = "table-shell";
-  container.innerHTML = `
-    <table>
-      <thead>
-        <tr>${headerHtml}</tr>
-      </thead>
-      <tbody>
-        ${bodyHtml}
-      </tbody>
-    </table>
-  `;
-}
-
-function renderPreview() {
-  if (state.comparison?.items?.length) {
-    const rows = state.comparison.items.map((item) => ({
-      row_index: item.row_index,
-      ...item.record,
-      prediction: item.prediction,
-      confidence: item.confidence,
-    }));
-    const columns = ["row_index", ...state.comparison.columns, "prediction", "confidence"];
-    renderTable(elements.datasetPreview, rows, columns, {
-      limit: 12,
-      emptyText: "No rows available for preview.",
-    });
+  if (!state.model.forecasting?.available || !state.request || !state.forecast) {
+    elements.forecastPanelTitle.textContent = "Прогноз недоступен";
+    elements.forecastPanelNote.textContent =
+      "Для этой версии нет временного прогноза. Нужна регрессионная модель с временным рядом.";
     return;
   }
 
-  if (state.validation?.sample_rows?.length) {
-    renderTable(elements.datasetPreview, state.validation.sample_rows, state.validation.columns, {
-      limit: 12,
-      emptyText: "Validation did not return sample rows.",
-    });
-    return;
-  }
-
-  elements.datasetPreview.className = "table-shell table-placeholder";
-  elements.datasetPreview.textContent = "Upload a dataset to inspect sample rows.";
+  const autoNote =
+    `Интервал вперёд ${formatDuration(state.request.totalMinutes)}. ` +
+    `Точек ${state.request.pointCount}, шаг отображения ${formatDuration(state.request.displayStepMinutes)}, ` +
+    `нативный шаг модели ${formatDuration(state.request.baseFrequencyMinutes)}.`;
+  elements.forecastPanelTitle.textContent = `Точки прогноза ${state.model.version_id}`;
+  elements.forecastPanelNote.textContent = autoNote;
 }
 
-function renderComparisonTable() {
-  if (!state.comparison?.items?.length) {
-    elements.comparisonTable.className = "table-shell table-placeholder";
-    elements.comparisonTable.textContent = "The merged dataset and prediction table will appear here.";
-    return;
-  }
-
-  const rows = state.comparison.items.map((item) => ({
-    row_index: item.row_index,
-    ...item.record,
-    prediction: item.prediction,
-    confidence: item.confidence,
-  }));
-  const columns = ["row_index", ...state.comparison.columns, "prediction", "confidence"];
-  renderTable(elements.comparisonTable, rows, columns, {
-    limit: 40,
-    emptyText: "Comparison results are empty.",
-  });
+function getCanvasHeight(canvas, fallbackHeight = DEFAULT_CHART_HEIGHT) {
+  const actualHeight = Math.round(canvas.clientHeight || 0);
+  return actualHeight > 0 ? actualHeight : fallbackHeight;
 }
 
-function renderForecastTable() {
-  if (!state.forecast?.forecast?.length) {
-    elements.forecastTable.className = "table-shell table-placeholder";
-    elements.forecastTable.textContent = "Future forecast rows will appear here after the forecast call.";
-    return;
-  }
-
-  renderTable(elements.forecastTable, state.forecast.forecast, ["step", "timestamp", "prediction"], {
-    limit: 24,
-    emptyText: "Forecast response did not contain future rows.",
-  });
-}
-
-function prepareCanvas(canvas, height) {
+function prepareCanvas(canvas, fallbackHeight = DEFAULT_CHART_HEIGHT) {
   const parentWidth = canvas.parentElement.clientWidth;
+  const height = getCanvasHeight(canvas, fallbackHeight);
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.floor(parentWidth * ratio);
   canvas.height = Math.floor(height * ratio);
@@ -493,67 +603,127 @@ function prepareCanvas(canvas, height) {
   };
 }
 
-function clearCanvas(canvas, height) {
-  const { context, width, height: actualHeight } = prepareCanvas(canvas, height);
-  context.clearRect(0, 0, width, actualHeight);
+function clearCanvas() {
+  const { context, width, height } = prepareCanvas(elements.chartCanvas, DEFAULT_CHART_HEIGHT);
+  context.clearRect(0, 0, width, height);
 }
 
-function downsample(items, maxPoints) {
-  if (items.length <= maxPoints) {
-    return items;
-  }
-
-  const sampled = [];
-  const step = (items.length - 1) / (maxPoints - 1);
-  for (let index = 0; index < maxPoints; index += 1) {
-    sampled.push(items[Math.round(index * step)]);
-  }
-  return sampled;
-}
-
-function drawAxes(context, width, height, bounds, xLabel) {
-  context.strokeStyle = "rgba(23, 32, 51, 0.24)";
+function drawAxes(context, bounds, theme) {
+  context.strokeStyle = theme.axis;
   context.lineWidth = 1;
   context.beginPath();
   context.moveTo(bounds.left, bounds.top);
   context.lineTo(bounds.left, bounds.bottom);
   context.lineTo(bounds.right, bounds.bottom);
   context.stroke();
-
-  context.fillStyle = "#5e6778";
-  context.font = '12px "Segoe UI Variable Text", "Trebuchet MS", sans-serif';
-  context.fillText(xLabel, bounds.right - context.measureText(xLabel).width, bounds.bottom + 28);
 }
 
-function drawLegend(context, entries) {
+function drawLegend(context, entries, theme) {
   let x = 28;
-  const y = 22;
-  context.font = '12px "Segoe UI Variable Text", "Trebuchet MS", sans-serif';
+  const y = 24;
+  setChartFont(context, 12, 500);
+
   for (const entry of entries) {
     context.fillStyle = entry.color;
     context.fillRect(x, y - 10, 16, 8);
     x += 22;
-    context.fillStyle = "#172033";
+    context.fillStyle = theme.text;
     context.fillText(entry.label, x, y);
     x += context.measureText(entry.label).width + 24;
   }
 }
 
-function drawComparisonRegressionChart(items) {
-  const { context, width, height } = prepareCanvas(elements.comparisonCanvas, 420);
-  const bounds = { top: 48, right: width - 26, bottom: height - 40, left: 58 };
-  const sampled = downsample(items, 160);
-  const actualValues = sampled.map((item) => Number(item.actual));
-  const predictedValues = sampled.map((item) => Number(item.prediction));
-  const values = actualValues.concat(predictedValues).filter((value) => Number.isFinite(value));
+function getActiveItems() {
+  const history = Array.isArray(state.forecast?.recent_history)
+    ? state.forecast.recent_history
+        .map((item) => ({
+          timestamp: item.timestamp,
+          value: Number(item.target),
+          series: "history",
+        }))
+        .filter((item) => Number.isFinite(item.value))
+    : [];
+
+  const forecast = Array.isArray(state.forecast?.forecast)
+    ? (Array.isArray(state.displayForecast) ? state.displayForecast : state.forecast.forecast)
+        .map((item) => ({
+          timestamp: item.timestamp,
+          value: Number(item.prediction),
+          series: "forecast",
+        }))
+        .filter((item) => Number.isFinite(item.value))
+    : [];
+
+  return [...history, ...forecast];
+}
+
+function getVisibleSlice(items) {
+  const total = items.length;
+  if (!total) {
+    return {
+      total: 0,
+      startIndex: 0,
+      endIndex: 0,
+      zoomLevel: 1,
+      items: [],
+    };
+  }
+
+  const minWindow = Math.min(1, MIN_VISIBLE_POINTS / total);
+  const currentWindow = clamp(chartState.viewEnd - chartState.viewStart || 1, minWindow, 1);
+  const viewStart = clamp(chartState.viewStart, 0, 1 - currentWindow);
+  const viewEnd = viewStart + currentWindow;
+  const startIndex = Math.floor(viewStart * Math.max(total - 1, 0));
+  const endIndex = Math.min(total - 1, Math.ceil(viewEnd * Math.max(total - 1, 0)));
+
+  chartState.viewStart = viewStart;
+  chartState.viewEnd = viewEnd;
+
+  return {
+    total,
+    startIndex,
+    endIndex,
+    zoomLevel: Number((1 / currentWindow).toFixed(2)),
+    items: items.slice(startIndex, endIndex + 1),
+  };
+}
+
+function updateChartControls(message, canReset = false, draggable = false) {
+  elements.chartRangeNote.textContent = message;
+  elements.chartResetButton.disabled = !canReset;
+  elements.chartCanvas.classList.toggle("is-draggable", draggable);
+  elements.chartCanvas.classList.toggle("is-dragging", draggable && chartState.isDragging);
+}
+
+function renderEmptyState(message, title = "Прогноз модели") {
+  chartState.renderedPoints = [];
+  chartState.hoverPointId = null;
+  hideTooltip();
+  elements.chartEmptyState.hidden = false;
+  elements.chartEmptyState.textContent = message;
+  elements.chartTitle.textContent = title;
+  updateChartControls(message, false, false);
+  clearCanvas();
+}
+
+function drawForecastChart() {
+  const allPoints = getActiveItems();
+  if (!allPoints.length) {
+    renderEmptyState("Нет данных для построения графика.", "Прогноз модели");
+    return;
+  }
+
+  const { context, width, height } = prepareCanvas(elements.chartCanvas, DEFAULT_CHART_HEIGHT);
+  const theme = getChartTheme();
+  const bounds = getPlotBounds(width, height);
+  const visibleSlice = getVisibleSlice(allPoints);
+  const values = visibleSlice.items.map((item) => item.value);
 
   context.clearRect(0, 0, width, height);
-  context.fillStyle = "#fbfaf7";
+  context.fillStyle = theme.background;
   context.fillRect(0, 0, width, height);
 
   if (!values.length) {
-    context.fillStyle = "#5e6778";
-    context.fillText("No numeric values available for the regression chart.", 24, 48);
     return;
   }
 
@@ -562,435 +732,464 @@ function drawComparisonRegressionChart(items) {
   const span = maxValue - minValue || 1;
   const paddedMin = minValue - span * 0.08;
   const paddedMax = maxValue + span * 0.08;
+  const plotHeight = bounds.bottom - bounds.top;
+  const plotWidth = bounds.right - bounds.left;
 
-  drawAxes(context, width, height, bounds, "Rows");
-  drawLegend(context, [
-    { label: "Actual", color: "#0f766e" },
-    { label: "Predicted", color: "#c2410c" },
-  ]);
+  drawAxes(context, bounds, theme);
+  drawLegend(
+    context,
+    [
+      { label: "История", color: theme.actual },
+      { label: "Прогноз", color: theme.predicted },
+    ],
+    theme,
+  );
 
   for (let tick = 0; tick <= 4; tick += 1) {
     const ratio = tick / 4;
-    const y = bounds.bottom - (bounds.bottom - bounds.top) * ratio;
+    const y = bounds.bottom - plotHeight * ratio;
     const value = paddedMin + (paddedMax - paddedMin) * ratio;
-    context.strokeStyle = "rgba(23, 32, 51, 0.08)";
+    context.strokeStyle = theme.grid;
     context.beginPath();
     context.moveTo(bounds.left, y);
     context.lineTo(bounds.right, y);
     context.stroke();
-    context.fillStyle = "#5e6778";
-    context.font = '12px "Segoe UI Variable Text", "Trebuchet MS", sans-serif';
-    context.fillText(formatMetricValue(value), 8, y + 4);
+
+    context.fillStyle = theme.label;
+    setChartFont(context, 12, 500);
+    context.fillText(formatNumber(value), 10, y + 4);
   }
 
-  function drawSeries(valuesToDraw, color) {
-    context.strokeStyle = color;
-    context.lineWidth = 2.5;
-    context.beginPath();
-    valuesToDraw.forEach((value, index) => {
-      const x =
-        bounds.left +
-        ((bounds.right - bounds.left) * index) / Math.max(valuesToDraw.length - 1, 1);
-      const y =
-        bounds.bottom -
-        ((value - paddedMin) / (paddedMax - paddedMin || 1)) * (bounds.bottom - bounds.top);
-      if (index === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
-      }
-    });
-    context.stroke();
-  }
+  const getPointX = (index) =>
+    bounds.left + (plotWidth * index) / Math.max(visibleSlice.items.length - 1, 1);
+  const getPointY = (value) =>
+    bounds.bottom - ((value - paddedMin) / (paddedMax - paddedMin || 1)) * plotHeight;
 
-  drawSeries(actualValues, "#0f766e");
-  drawSeries(predictedValues, "#c2410c");
-}
-
-function drawClassificationMatrix(items) {
-  const { context, width, height } = prepareCanvas(elements.comparisonCanvas, 420);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#fbfaf7";
-  context.fillRect(0, 0, width, height);
-
-  const labels = Array.from(
-    new Set(items.flatMap((item) => [String(item.actual), String(item.prediction)])),
-  ).sort((left, right) => left.localeCompare(right, "ru"));
-
-  const matrix = labels.map(() => labels.map(() => 0));
-  for (const item of items) {
-    const actualIndex = labels.indexOf(String(item.actual));
-    const predictedIndex = labels.indexOf(String(item.prediction));
-    matrix[actualIndex][predictedIndex] += 1;
-  }
-
-  const maxValue = Math.max(...matrix.flat(), 1);
-  const gridSize = Math.min(width - 180, height - 120);
-  const cellSize = gridSize / Math.max(labels.length, 1);
-  const originX = 120;
-  const originY = 70;
-
-  context.font = '12px "Segoe UI Variable Text", "Trebuchet MS", sans-serif';
-  context.fillStyle = "#172033";
-  context.fillText("Predicted", originX + gridSize / 2 - 24, 34);
-  context.save();
-  context.translate(30, originY + gridSize / 2 + 20);
-  context.rotate(-Math.PI / 2);
-  context.fillText("Actual", 0, 0);
-  context.restore();
-
-  labels.forEach((label, index) => {
-    const position = originX + index * cellSize + cellSize / 2;
-    context.fillText(label, position - context.measureText(label).width / 2, originY - 14);
-    context.fillText(
-      label,
-      originX - 36 - context.measureText(label).width,
-      originY + index * cellSize + cellSize / 2 + 4,
-    );
-  });
-
-  for (let rowIndex = 0; rowIndex < labels.length; rowIndex += 1) {
-    for (let columnIndex = 0; columnIndex < labels.length; columnIndex += 1) {
-      const value = matrix[rowIndex][columnIndex];
-      const alpha = 0.12 + (value / maxValue) * 0.78;
-      context.fillStyle = `rgba(29, 78, 216, ${alpha})`;
-      context.fillRect(
-        originX + columnIndex * cellSize,
-        originY + rowIndex * cellSize,
-        cellSize - 2,
-        cellSize - 2,
-      );
-
-      context.fillStyle = value > maxValue * 0.45 ? "#ffffff" : "#172033";
-      const text = String(value);
-      context.fillText(
-        text,
-        originX + columnIndex * cellSize + cellSize / 2 - context.measureText(text).width / 2,
-        originY + rowIndex * cellSize + cellSize / 2 + 4,
-      );
-    }
-  }
-}
-
-function renderComparisonChart() {
-  const comparison = state.comparison;
-  if (!comparison?.items?.length) {
-    elements.comparisonChartEmptyState.hidden = false;
-    clearCanvas(elements.comparisonCanvas, 420);
-    return;
-  }
-
-  elements.comparisonChartEmptyState.hidden = true;
-  if (comparison.task_type === "regression") {
-    elements.comparisonChartTitle.textContent = "Actual vs Predicted by Row";
-    drawComparisonRegressionChart(comparison.items);
-    return;
-  }
-
-  elements.comparisonChartTitle.textContent = "Prediction Matrix";
-  drawClassificationMatrix(comparison.items);
-}
-
-function drawForecastTimeline() {
-  const { context, width, height } = prepareCanvas(elements.forecastCanvas, 360);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#fbfaf7";
-  context.fillRect(0, 0, width, height);
-
-  const payload = state.forecast;
-  if (!payload?.forecast?.length) {
-    return;
-  }
-
-  const history = downsample(payload.recent_history ?? [], 36).map((item, index) => ({
-    x: index,
-    y: Number(item.target),
+  const pointLayouts = visibleSlice.items.map((item, index) => ({
+    ...item,
+    x: getPointX(index),
+    y: getPointY(item.value),
+    pointId: getPointId(item),
   }));
-  const forecastStartX = history.length > 0 ? history[history.length - 1].x + 1 : 0;
-  const future = payload.forecast.map((item, index) => ({
-    x: forecastStartX + index,
-    y: Number(item.prediction),
-  }));
-  const allPoints = history.concat(future).filter((point) => Number.isFinite(point.y));
-  if (!allPoints.length) {
-    return;
-  }
+  const historyPoints = pointLayouts.filter((item) => item.series === "history");
+  const forecastPoints = pointLayouts.filter((item) => item.series === "forecast");
+  const firstForecastIndex = pointLayouts.findIndex((item) => item.series === "forecast");
 
-  const bounds = { top: 48, right: width - 26, bottom: height - 40, left: 58 };
-  const minValue = Math.min(...allPoints.map((point) => point.y));
-  const maxValue = Math.max(...allPoints.map((point) => point.y));
-  const span = maxValue - minValue || 1;
-  const paddedMin = minValue - span * 0.08;
-  const paddedMax = maxValue + span * 0.08;
-
-  drawAxes(context, width, height, bounds, "Forecast steps");
-  drawLegend(context, [
-    { label: "Recent history", color: "#0f766e" },
-    { label: "Forecast", color: "#c2410c" },
-  ]);
-
-  for (let tick = 0; tick <= 4; tick += 1) {
-    const ratio = tick / 4;
-    const y = bounds.bottom - (bounds.bottom - bounds.top) * ratio;
-    const value = paddedMin + (paddedMax - paddedMin) * ratio;
-    context.strokeStyle = "rgba(23, 32, 51, 0.08)";
+  if (firstForecastIndex > 0) {
+    const dividerX = getPointX(firstForecastIndex);
+    context.strokeStyle = theme.divider;
+    context.setLineDash([6, 6]);
     context.beginPath();
-    context.moveTo(bounds.left, y);
-    context.lineTo(bounds.right, y);
+    context.moveTo(dividerX, bounds.top);
+    context.lineTo(dividerX, bounds.bottom);
     context.stroke();
-    context.fillStyle = "#5e6778";
-    context.font = '12px "Segoe UI Variable Text", "Trebuchet MS", sans-serif';
-    context.fillText(formatMetricValue(value), 8, y + 4);
+    context.setLineDash([]);
   }
 
-  function mapX(point) {
-    const maxX = allPoints[allPoints.length - 1].x || 1;
-    return bounds.left + (point.x / Math.max(maxX, 1)) * (bounds.right - bounds.left);
-  }
-
-  function mapY(point) {
-    return (
-      bounds.bottom -
-      ((point.y - paddedMin) / (paddedMax - paddedMin || 1)) * (bounds.bottom - bounds.top)
-    );
-  }
-
-  function drawSeries(points, color, dashed = false) {
-    if (!points.length) {
+  const drawSeries = (points, color, dashed = false, prependPoint = null) => {
+    if (!points.length && !prependPoint) {
       return;
     }
-    context.save();
+
     context.strokeStyle = color;
     context.lineWidth = 2.5;
-    if (dashed) {
-      context.setLineDash([8, 6]);
-    }
+    context.setLineDash(dashed ? [10, 6] : []);
     context.beginPath();
-    points.forEach((point, index) => {
-      const x = mapX(point);
-      const y = mapY(point);
+
+    const sourcePoints = prependPoint ? [prependPoint, ...points] : points;
+    sourcePoints.forEach((point, index) => {
       if (index === 0) {
-        context.moveTo(x, y);
+        context.moveTo(point.x, point.y);
       } else {
-        context.lineTo(x, y);
+        context.lineTo(point.x, point.y);
       }
     });
+
     context.stroke();
-    context.restore();
+    context.setLineDash([]);
+  };
+
+  drawSeries(historyPoints, theme.actual);
+
+  const bridgePoint =
+    historyPoints.length && forecastPoints.length ? historyPoints[historyPoints.length - 1] : null;
+  drawSeries(forecastPoints, theme.predicted, true, bridgePoint);
+
+  chartState.renderedPoints = pointLayouts;
+  const hoveredPoint = pointLayouts.find((point) => point.pointId === chartState.hoverPointId) || null;
+  if (!hoveredPoint) {
+    chartState.hoverPointId = null;
   }
 
-  drawSeries(history, "#0f766e", false);
-
-  if (history.length && future.length) {
-    drawSeries([history[history.length - 1], ...future], "#c2410c", true);
-  } else {
-    drawSeries(future, "#c2410c", true);
-  }
-
-  for (const point of future) {
-    context.fillStyle = "#c2410c";
+  pointLayouts.forEach((point) => {
+    const isHovered = hoveredPoint?.pointId === point.pointId;
+    const radius = isHovered ? 5 : point.series === "forecast" ? 3 : 2.75;
+    context.fillStyle = point.series === "forecast" ? theme.predicted : theme.actual;
     context.beginPath();
-    context.arc(mapX(point), mapY(point), 4.5, 0, Math.PI * 2);
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2);
     context.fill();
+
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = isHovered ? 2 : 1.5;
+    context.stroke();
+  });
+
+  context.fillStyle = theme.label;
+  setChartFont(context, 11, 500);
+  context.fillText(formatTimestamp(pointLayouts[0].timestamp), bounds.left, bounds.bottom + 20);
+  const endLabel = formatTimestamp(pointLayouts[pointLayouts.length - 1].timestamp);
+  context.fillText(endLabel, bounds.right - context.measureText(endLabel).width, bounds.bottom + 20);
+
+  context.fillStyle = theme.text;
+  setChartFont(context, 11, 600);
+  const zoomText = `Масштаб: ${visibleSlice.zoomLevel}x`;
+  context.fillText(zoomText, bounds.right - context.measureText(zoomText).width, bounds.top - 16);
+
+  const zoomEnabled = allPoints.length > MIN_VISIBLE_POINTS;
+  const baseText = `Проект ${state.model.project_id}, версия ${state.model.version_id}, цель ${state.model.target}.`;
+  const rangeText =
+    ` Интервал ${formatDuration(state.request.totalMinutes)}, точек ${state.request.pointCount}, ` +
+    `шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг ${formatDuration(state.request.baseFrequencyMinutes)}.`;
+  const interactionText = zoomEnabled
+    ? " Колесо мыши масштабирует график, перетаскивание двигает окно, наведение показывает значение точки."
+    : " Наведите на точку, чтобы увидеть значение.";
+
+  elements.chartTitle.textContent = `Прогноз модели ${state.model.version_id}`;
+  updateChartControls(`${baseText}${rangeText}${interactionText}`, zoomEnabled && !isViewportReset(), zoomEnabled);
+
+  if (hoveredPoint) {
+    showTooltip(hoveredPoint);
+  } else {
+    hideTooltip();
   }
 }
 
-function renderForecastChart() {
-  if (!state.forecast?.forecast?.length) {
-    elements.forecastChartEmptyState.hidden = false;
-    clearCanvas(elements.forecastCanvas, 360);
-    elements.forecastWarning.className = "status-banner status-idle";
-    elements.forecastWarning.textContent = "Forecast notes will appear here.";
+function renderChart() {
+  if (state.error) {
+    renderEmptyState(state.error, "Не удалось загрузить модель");
     return;
   }
 
-  elements.forecastChartEmptyState.hidden = true;
-  elements.forecastChartTitle.textContent = "Recent History + Future Points";
-  drawForecastTimeline();
-
-  if (state.forecast.warning) {
-    elements.forecastWarning.className = "status-banner status-busy";
-    elements.forecastWarning.textContent = state.forecast.warning;
-  } else {
-    elements.forecastWarning.className = "status-banner status-success";
-    elements.forecastWarning.textContent =
-      `Forecast cadence: ${state.forecast.base_frequency_minutes} min.`;
+  if (!state.model) {
+    renderEmptyState("Обучите модель на странице запуска, чтобы открыть её график.", "Прогноз модели");
+    return;
   }
+
+  if (!state.model.forecasting?.available) {
+    renderEmptyState(
+      `Для модели ${state.model.version_id} временной прогноз недоступен. Нужна регрессионная модель с временным рядом.`,
+      "Прогноз недоступен",
+    );
+    return;
+  }
+
+  if (!state.forecast) {
+    renderEmptyState("Прогноз ещё не загружен.", "Прогноз модели");
+    return;
+  }
+
+  elements.chartEmptyState.hidden = true;
+  drawForecastChart();
 }
 
 function renderAll() {
-  buildSummaryCards();
-  renderPreview();
-  renderComparisonTable();
-  renderForecastTable();
-  renderComparisonChart();
-  renderForecastChart();
+  setInteractiveState();
+  updateSidebarInfo();
+  renderPredictionTable();
+  renderChart();
 }
 
-function trainingStatusMessage(training) {
-  const effectiveOptions = training.training_options?.effective ?? {};
-  const presetSuffix = effectiveOptions.preset ? `/${effectiveOptions.preset}` : "";
-  let message =
-    `Training finished: backend=${training.backend}${presetSuffix}, ` +
-    `model=${training.model_version.version_id}.`;
-  if (training.warnings?.length) {
-    message += ` Warning: ${training.warnings[0]}`;
-  }
-  return message;
+function getCanvasMetrics() {
+  const rect = elements.chartCanvas.getBoundingClientRect();
+  const bounds = getPlotBounds(rect.width, rect.height);
+  return {
+    rect,
+    bounds,
+    plotWidth: bounds.right - bounds.left,
+  };
 }
 
-function retrainingStatusMessage(retraining) {
-  const profit = retraining.evaluation?.profit ?? null;
-  let message =
-    `Retraining finished: candidate=${retraining.candidate_model_version.version_id}, ` +
-    `scope=${retraining.selection_summary.history_scope}.`;
-  if (profit) {
-    message +=
-      ` ${profit.primary_metric}: ${formatMetricValue(profit.current_value)} -> ` +
-      `${formatMetricValue(profit.candidate_value)} `;
-    message += `(${formatMetricValue(profit.relative_gain_percent)}% gain).`;
-  }
-  if (retraining.activated) {
-    message += " Candidate activated.";
-  } else {
-    message += ` ${retraining.activation_reason}`;
-  }
-  return message;
+function canZoomChart() {
+  return getActiveItems().length > MIN_VISIBLE_POINTS;
 }
 
-function syncTrainingControls() {
-  const lightAutoMLSelected = elements.backendInput.value !== "sklearn";
-  elements.presetInput.disabled = !lightAutoMLSelected;
-  elements.cvFoldsInput.disabled = !lightAutoMLSelected;
-  elements.timeoutSecondsInput.disabled = !lightAutoMLSelected;
-  for (const input of elements.algoInputs) {
-    input.disabled = !lightAutoMLSelected;
-  }
-
-  if (lightAutoMLSelected) {
-    elements.trainingOptionsNote.textContent =
-      "Preset, algorithms, CV and timeout apply only to the LightAutoML backend.";
-  } else {
-    elements.trainingOptionsNote.textContent =
-      "sklearn uses the local random-forest pipeline. Preset, algorithms, CV and timeout are ignored.";
-  }
+function isInsidePlot(clientX, clientY) {
+  const { rect, bounds } = getCanvasMetrics();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
 }
 
-async function runAction(actionName, action) {
+function getNearestRenderedPoint(clientX, clientY) {
+  if (!chartState.renderedPoints.length || !isInsidePlot(clientX, clientY)) {
+    return null;
+  }
+
+  const { rect } = getCanvasMetrics();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  const maxDistance = 18;
+  const maxDistanceSq = maxDistance * maxDistance;
+
+  let nearestPoint = null;
+  let nearestDistanceSq = Number.POSITIVE_INFINITY;
+
+  for (const point of chartState.renderedPoints) {
+    const distanceSq = (point.x - x) ** 2 + (point.y - y) ** 2;
+    if (distanceSq < nearestDistanceSq) {
+      nearestDistanceSq = distanceSq;
+      nearestPoint = point;
+    }
+  }
+
+  return nearestDistanceSq <= maxDistanceSq ? nearestPoint : null;
+}
+
+function handleChartHover(event) {
+  if (chartState.isDragging) {
+    return;
+  }
+
+  const nearestPoint = getNearestRenderedPoint(event.clientX, event.clientY);
+  if (!nearestPoint) {
+    clearHoverPoint();
+    return;
+  }
+
+  if (nearestPoint.pointId === chartState.hoverPointId) {
+    showTooltip(nearestPoint);
+    return;
+  }
+
+  chartState.hoverPointId = nearestPoint.pointId;
+  renderChart();
+}
+
+function handleChartWheel(event) {
+  if (!canZoomChart()) {
+    return;
+  }
+
+  event.preventDefault();
+  const total = getActiveItems().length;
+  const minWindow = Math.min(1, MIN_VISIBLE_POINTS / total);
+  const currentWindow = clamp(chartState.viewEnd - chartState.viewStart, minWindow, 1);
+  const zoomFactor = event.deltaY < 0 ? 0.86 : 1.16;
+  const nextWindow = clamp(currentWindow * zoomFactor, minWindow, 1);
+
+  if (Math.abs(nextWindow - currentWindow) < 0.0001) {
+    return;
+  }
+
+  const { rect, bounds, plotWidth } = getCanvasMetrics();
+  const relativeX = clamp((event.clientX - rect.left - bounds.left) / Math.max(plotWidth, 1), 0, 1);
+  const focusPoint = chartState.viewStart + currentWindow * relativeX;
+  const nextStart = clamp(focusPoint - nextWindow * relativeX, 0, 1 - nextWindow);
+
+  chartState.viewStart = nextStart;
+  chartState.viewEnd = nextStart + nextWindow;
+  renderChart();
+}
+
+function handlePointerDown(event) {
+  if (event.button !== 0 || !canZoomChart() || !isInsidePlot(event.clientX, event.clientY)) {
+    return;
+  }
+
+  clearHoverPoint({ rerender: false });
+  chartState.isDragging = true;
+  chartState.pointerId = event.pointerId;
+  chartState.dragStartX = event.clientX;
+  chartState.dragOriginStart = chartState.viewStart;
+  chartState.dragWindow = chartState.viewEnd - chartState.viewStart;
+
+  elements.chartCanvas.setPointerCapture(event.pointerId);
+  renderChart();
+  event.preventDefault();
+}
+
+function handlePointerMove(event) {
+  if (!chartState.isDragging) {
+    handleChartHover(event);
+    return;
+  }
+
+  if (!chartState.isDragging || chartState.pointerId !== event.pointerId) {
+    return;
+  }
+
+  const { plotWidth } = getCanvasMetrics();
+  const deltaRatio = (event.clientX - chartState.dragStartX) / Math.max(plotWidth, 1);
+  const nextStart = clamp(
+    chartState.dragOriginStart - deltaRatio * chartState.dragWindow,
+    0,
+    1 - chartState.dragWindow,
+  );
+
+  chartState.viewStart = nextStart;
+  chartState.viewEnd = nextStart + chartState.dragWindow;
+  renderChart();
+}
+
+function stopDrag(pointerId = null) {
+  if (!chartState.isDragging) {
+    return;
+  }
+  if (pointerId !== null && chartState.pointerId !== pointerId) {
+    return;
+  }
+
+  chartState.isDragging = false;
+  chartState.pointerId = null;
+  hideTooltip();
+  renderChart();
+}
+
+async function loadForecast(intervalMinutes, pointCount = state.selectedPointCount, { resetZoom = true } = {}) {
+  if (!state.model?.forecasting?.available) {
+    state.forecast = null;
+    state.displayForecast = null;
+    state.request = null;
+    syncPointCountControls(null);
+    renderAll();
+    return;
+  }
+
+  const request = buildForecastRequest(state.model, intervalMinutes, pointCount);
+  const token = ++state.forecastToken;
+
+  state.isLoadingForecast = true;
+  state.error = null;
+  state.selectedIntervalMinutes = request.intervalMinutes;
+  state.selectedPointCount = request.pointCount;
+  state.availablePointCounts = getAvailablePointCounts(request.intervalMinutes);
+  setInteractiveState();
+  elements.forecastPanelNote.textContent = "Загружаю прогноз на нативной частоте модели...";
+
   try {
-    setBusy(true);
-    setStatus("busy", actionName);
-    await action();
+    const searchParams = new URLSearchParams({
+      steps: String(request.backendSteps),
+      horizon_minutes: String(request.backendHorizonMinutes),
+    });
+    const forecast = await fetchJson(`/models/${encodeURIComponent(state.model.version_id)}/forecast?${searchParams.toString()}`);
+    if (token !== state.forecastToken) {
+      return;
+    }
+
+    state.error = null;
+    state.forecast = forecast;
+    state.request = request;
+    state.displayForecast = buildDisplayForecast(forecast, request);
+    if (resetZoom) {
+      resetViewport();
+    }
+    updateLocation();
   } catch (error) {
-    setStatus("error", normalizeError(error));
+    if (token !== state.forecastToken) {
+      return;
+    }
+
+    state.forecast = null;
+    state.displayForecast = null;
+    state.request = request;
+    state.error = error instanceof Error ? error.message : String(error);
   } finally {
-    setBusy(false);
+    if (token === state.forecastToken) {
+      state.isLoadingForecast = false;
+      renderAll();
+    }
   }
 }
 
-async function handleValidate() {
-  const workflow = requireFileAndTarget();
-  state.validation = await postFile("/datasets/validate/file", {
-    ...workflow,
-    includeTarget: true,
-  });
-  setStatus("success", `Dataset validated: ${state.validation.rows} rows, task=${state.validation.task_type}.`);
-  renderAll();
-}
-
-async function handleTrain() {
-  const workflow = requireTrainingWorkflow();
-  state.training = await postFile("/training/run/file", {
-    ...workflow,
-    includeTarget: true,
-    trainingOptions: workflow.trainingOptions,
-  });
-  state.retraining = null;
-  state.comparison = null;
+async function loadModelAndGraph() {
+  const context = getRequestedContext();
+  state.error = null;
   state.forecast = null;
-  setStatus("success", trainingStatusMessage(state.training));
-  renderAll();
+  state.displayForecast = null;
+  state.request = null;
+  state.availablePointCounts = [];
+  state.selectedPointCount = null;
+
+  try {
+    const model = context.versionId
+      ? await fetchJson(`/models/${encodeURIComponent(context.versionId)}`)
+      : await fetchJson(`/models/latest?project_id=${encodeURIComponent(context.projectId)}`);
+    state.model = model;
+  } catch (error) {
+    state.model = null;
+    state.error = error instanceof Error ? error.message : String(error);
+    renderAll();
+    return;
+  }
+
+  if (!state.model.forecasting?.available) {
+    state.selectedIntervalMinutes = null;
+    syncPointCountControls(null);
+    renderAll();
+    return;
+  }
+
+  state.selectedIntervalMinutes = getInitialIntervalMinutes(context, state.model);
+  syncPointCountControls(state.selectedIntervalMinutes, context.pointCount);
+  await loadForecast(state.selectedIntervalMinutes, state.selectedPointCount);
 }
 
-async function handleCompare() {
-  const workflow = requireFileAndTarget();
-  state.comparison = await postFile("/predictions/compare/file", {
-    ...workflow,
-    includeTarget: true,
+function handleResize() {
+  renderChart();
+}
+
+elements.chartResetButton.addEventListener("click", () => {
+  resetViewport();
+  renderChart();
+});
+
+for (const button of elements.intervalButtons) {
+  button.addEventListener("click", async () => {
+    const intervalMinutes = Number(button.dataset.intervalMinutes);
+    if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0 || state.isLoadingForecast) {
+      return;
+    }
+    syncPointCountControls(intervalMinutes);
+    await loadForecast(intervalMinutes, state.selectedPointCount);
   });
-  setStatus(
-    "success",
-    `Comparison ready: ${state.comparison.rows} rows, model=${state.comparison.model_version}.`,
-  );
-  renderAll();
 }
 
-async function handleRetrain() {
-  const workflow = requireRetrainingWorkflow();
-  state.retraining = await postFile("/retraining/run/file", {
-    ...workflow,
-    includeTarget: true,
-    trainingOptions: workflow.trainingOptions,
-    retrainingOptions: workflow.retrainingOptions,
-  });
-  state.training = null;
-  state.comparison = null;
-  state.forecast = null;
-  setStatus("success", retrainingStatusMessage(state.retraining));
-  renderAll();
-}
+elements.pointCountSlider.addEventListener("input", () => {
+  const pointCount = getSliderPointCount();
+  if (!pointCount) {
+    return;
+  }
 
-async function handleForecast() {
-  const workflow = requireForecastParams();
-  state.forecast = await postJson("/forecast/run", {
-    project_id: workflow.projectId,
-    horizon_minutes: workflow.horizonMinutes,
-    steps: workflow.forecastSteps,
-  });
-  setStatus(
-    "success",
-    `Forecast ready: ${state.forecast.steps} step(s), horizon ${state.forecast.requested_horizon_minutes} min.`,
-  );
-  renderAll();
-}
-
-async function handleTrainAndCompare() {
-  await handleTrain();
-  await handleCompare();
-}
-
-elements.validateButton.addEventListener("click", () => {
-  runAction("Validating dataset...", handleValidate);
+  state.selectedPointCount = pointCount;
+  updatePointCountControls();
 });
 
-elements.trainButton.addEventListener("click", () => {
-  runAction("Training champion model...", handleTrain);
+elements.pointCountSlider.addEventListener("change", () => {
+  const pointCount = getSliderPointCount();
+  if (!pointCount || state.isLoadingForecast || !state.selectedIntervalMinutes) {
+    return;
+  }
+
+  applyDisplayPointCount(pointCount);
 });
 
-elements.retrainButton.addEventListener("click", () => {
-  runAction("Retraining challenger model and comparing profit...", handleRetrain);
+elements.chartCanvas.addEventListener("wheel", handleChartWheel, { passive: false });
+elements.chartCanvas.addEventListener("pointerdown", handlePointerDown);
+elements.chartCanvas.addEventListener("pointermove", handlePointerMove);
+elements.chartCanvas.addEventListener("pointerup", (event) => {
+  stopDrag(event.pointerId);
+});
+elements.chartCanvas.addEventListener("pointercancel", (event) => {
+  stopDrag(event.pointerId);
+});
+elements.chartCanvas.addEventListener("lostpointercapture", () => {
+  stopDrag();
+});
+elements.chartCanvas.addEventListener("pointerleave", () => {
+  clearHoverPoint();
 });
 
-elements.compareButton.addEventListener("click", () => {
-  runAction("Comparing actual vs predicted...", handleCompare);
-});
+window.addEventListener("resize", handleResize);
 
-elements.forecastButton.addEventListener("click", () => {
-  runAction("Generating short-horizon forecast...", handleForecast);
-});
-
-elements.trainCompareButton.addEventListener("click", () => {
-  runAction("Training model and building comparison...", handleTrainAndCompare);
-});
-
-elements.backendInput.addEventListener("change", () => {
-  syncTrainingControls();
-});
-
-window.addEventListener("resize", () => {
-  renderComparisonChart();
-  renderForecastChart();
-});
-
-syncTrainingControls();
 renderAll();
+loadModelAndGraph();

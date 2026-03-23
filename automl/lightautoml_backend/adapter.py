@@ -215,8 +215,6 @@ class TabularAutoMLAdapter:
                     options=options,
                 )
                 return self._finalize_training_result(result, requested_options, warnings)
-            except ValueError:
-                raise
             except Exception as exc:
                 warnings.append(f"LightAutoML training failed and sklearn fallback was used: {exc}")
 
