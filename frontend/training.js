@@ -9,6 +9,7 @@ const elements = {
   fileInput: document.getElementById("dataset-file"),
   projectIdInput: document.getElementById("project-id"),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   targetInput: document.getElementById("target-column"),
   taskTypeInput: document.getElementById("task-type"),
@@ -298,6 +299,14 @@ function syncProjectNavigation(projectId) {
 
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.modelsLinks) {
+    const targetUrl = new URL("./models.html", window.location.href);
     if (normalizedProjectId) {
       targetUrl.searchParams.set("project_id", normalizedProjectId);
     }

@@ -18,6 +18,7 @@ from automl.training.preprocessing import TabularPreprocessor
 from backend.services.dataset_service import DatasetService
 from backend.services.settings import get_settings
 from backend.utils.compat import patch_numpy_for_lightautoml
+from backend.utils.io import dataframe_to_records, pythonize
 
 
 patch_numpy_for_lightautoml()
@@ -161,6 +162,8 @@ class TrainingResult:
     backend_name: str
     training_options: dict[str, Any]
     warnings: list[str]
+    holdout_predictions: list[dict[str, Any]] = field(default_factory=list)
+    training_artifacts: dict[str, Any] = field(default_factory=dict)
 
 
 class TabularAutoMLAdapter:
@@ -288,6 +291,13 @@ class TabularAutoMLAdapter:
             y_true=y_test,
             y_pred=predictions,
         )
+        holdout_predictions = self._build_holdout_predictions(
+            x_holdout=x_test,
+            y_holdout=y_test,
+            predictions=predictions,
+            confidences=self._lightautoml_confidences(task_type=task_type, raw_predictions=raw_predictions),
+            task_type=task_type,
+        )
 
         effective_options = self._effective_options(
             options=options,
@@ -325,6 +335,7 @@ class TabularAutoMLAdapter:
             backend_name="lightautoml",
             training_options={"effective": effective_options},
             warnings=[],
+            holdout_predictions=holdout_predictions,
         )
 
     def _train_with_sklearn(
@@ -402,6 +413,13 @@ class TabularAutoMLAdapter:
             y_true=y_test,
             y_pred=predictions,
         )
+        holdout_predictions = self._build_holdout_predictions(
+            x_holdout=x_test,
+            y_holdout=y_test,
+            predictions=predictions,
+            confidences=self._predict_confidence(pipeline, x_test),
+            task_type=task_type,
+        )
         feature_importances = self._estimate_feature_importance(
             model=pipeline,
             task_type=task_type,
@@ -445,6 +463,7 @@ class TabularAutoMLAdapter:
             backend_name="sklearn-fallback",
             training_options={"effective": effective_options},
             warnings=[],
+            holdout_predictions=holdout_predictions,
         )
 
     def _build_forecasting_bundle(
@@ -542,7 +561,98 @@ class TabularAutoMLAdapter:
         result.warnings.extend(warnings)
         result.bundle["training_options"] = result.training_options
         result.bundle["warnings"] = list(result.warnings)
+        result.training_artifacts = TabularAutoMLAdapter._build_training_artifacts(
+            bundle=result.bundle,
+            backend_name=result.backend_name,
+            training_options=result.training_options,
+            warnings=result.warnings,
+            holdout_predictions=result.holdout_predictions,
+        )
         return result
+
+    @staticmethod
+    def _build_holdout_predictions(
+        x_holdout: pd.DataFrame,
+        y_holdout: pd.Series,
+        predictions,
+        confidences,
+        task_type: str,
+    ) -> list[dict[str, Any]]:
+        """Serialize holdout rows together with actual and predicted outputs."""
+        holdout_rows = dataframe_to_records(x_holdout.reset_index(drop=True))
+        actual_values = [pythonize(value) for value in y_holdout.reset_index(drop=True).tolist()]
+        predicted_values = [pythonize(value) for value in np.asarray(predictions).reshape(-1).tolist()]
+        confidence_values = None
+        if confidences is not None:
+            confidence_values = [pythonize(value) for value in np.asarray(confidences).reshape(-1).tolist()]
+
+        items: list[dict[str, Any]] = []
+        for index, record in enumerate(holdout_rows):
+            prediction = predicted_values[index]
+            actual = actual_values[index]
+            item = {
+                "row_index": index,
+                "record": record,
+                "actual": actual,
+                "prediction": prediction,
+                "confidence": confidence_values[index] if confidence_values is not None else None,
+            }
+            if task_type == "regression":
+                item["error"] = round(float(prediction) - float(actual), 6)
+            else:
+                item["matched"] = prediction == actual
+            items.append(item)
+        return items
+
+    @staticmethod
+    def _predict_confidence(model, frame):
+        """Return max class probability when the estimator exposes predict_proba."""
+        if hasattr(model, "predict_proba"):
+            probabilities = model.predict_proba(frame)
+            return probabilities.max(axis=1)
+        return None
+
+    @staticmethod
+    def _build_training_artifacts(
+        bundle: dict[str, Any],
+        backend_name: str,
+        training_options: dict[str, Any],
+        warnings: list[str],
+        holdout_predictions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Persist lightweight training diagnostics next to registry metadata."""
+        forecasting = bundle.get("forecasting") or {}
+        return {
+            "backend": backend_name,
+            "preset": bundle.get("preset_name"),
+            "numeric_features": list(bundle.get("numeric_features") or []),
+            "categorical_features": list(bundle.get("categorical_features") or []),
+            "feature_importances": dict(bundle.get("feature_importances") or {}),
+            "baseline_profile": dict(bundle.get("baseline_profile") or {}),
+            "training_sample": list(bundle.get("training_sample") or []),
+            "class_mapping": dict(bundle.get("class_mapping") or {}),
+            "training_options": training_options,
+            "warnings": list(warnings),
+            "holdout_rows": len(holdout_predictions),
+            "forecasting": {
+                "available": bool(forecasting.get("enabled")),
+                "default_horizon_minutes": forecasting.get("default_horizon_minutes"),
+                "base_frequency_minutes": forecasting.get("base_frequency_minutes"),
+                "forecast_model": forecasting.get("forecasting_model"),
+                "metrics": forecasting.get("metrics"),
+            },
+        }
+
+    @staticmethod
+    def _lightautoml_confidences(task_type: str, raw_predictions):
+        """Normalize LightAutoML raw outputs into per-row confidence scores."""
+        data = np.asarray(raw_predictions)
+        if task_type == "regression":
+            return None
+        if task_type == "binary":
+            probabilities = data.reshape(-1)
+            return np.maximum(probabilities, 1.0 - probabilities)
+        return data.max(axis=1)
 
     def _estimate_feature_importance(
         self,

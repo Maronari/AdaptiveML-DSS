@@ -50,6 +50,25 @@ def list_projects() -> dict[str, Any]:
     return {"items": registry_service.list_projects()}
 
 
+@router.get("/projects/{project_id}/models", tags=["projects"])
+def list_project_models(project_id: str) -> dict[str, Any]:
+    """Return stored model versions for one project."""
+    try:
+        return registry_service.list_model_versions(project_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/projects/{project_id}/models/{version_id}/activate", tags=["projects"])
+def activate_project_model(project_id: str, version_id: str) -> dict[str, Any]:
+    """Switch the active champion model for a project."""
+    try:
+        model = registry_service.activate_model_version(project_id=project_id, version_id=version_id)
+        return model.to_dict()
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/projects", tags=["projects"], status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreateRequest) -> dict[str, Any]:
     """Create a project entry before any dataset upload or training run."""

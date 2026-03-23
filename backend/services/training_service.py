@@ -49,6 +49,8 @@ class TrainingService:
             feature_names=training_result.feature_names,
             metrics=training_result.metrics,
             bundle=training_result.bundle,
+            holdout_predictions=training_result.holdout_predictions,
+            training_artifacts=training_result.training_artifacts,
         )
         forecasting_bundle = training_result.bundle.get("forecasting")
 

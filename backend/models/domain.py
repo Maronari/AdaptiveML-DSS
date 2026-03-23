@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -51,6 +51,8 @@ class ModelVersion:
     storage_backend: str = "filesystem"
     bucket: str | None = None
     object_key: str | None = None
+    holdout_predictions: list[dict[str, Any]] = field(default_factory=list)
+    training_artifacts: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataclass into a plain dictionary."""

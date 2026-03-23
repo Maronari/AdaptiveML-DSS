@@ -80,6 +80,8 @@ class RegistryService:
         feature_names: list[str],
         metrics: dict[str, float],
         bundle: dict[str, Any],
+        holdout_predictions: list[dict[str, Any]] | None = None,
+        training_artifacts: dict[str, Any] | None = None,
         promotion_mode: str = "auto",
     ) -> ModelVersion:
         """Persist a trained model bundle and update champion status."""
@@ -120,6 +122,8 @@ class RegistryService:
             storage_backend=storage_ref.storage_backend,
             bucket=storage_ref.bucket,
             object_key=storage_ref.object_key,
+            holdout_predictions=list(holdout_predictions or []),
+            training_artifacts=dict(training_artifacts or {}),
         )
         models.append(record.to_dict())
         self.registry.write("models", models)
@@ -162,6 +166,58 @@ class RegistryService:
             if model["project_id"] == project_id:
                 return model
         raise ValueError(f"No model versions found for project '{project_id}'.")
+
+    def list_model_versions(self, project_id: str) -> dict[str, Any]:
+        """Return model history for a project with dataset-level context."""
+        projects = self.registry.read("projects")
+        datasets = self.registry.read("datasets")
+        models = self.registry.read("models")
+
+        project_record = next((project for project in projects if project["project_id"] == project_id), None)
+        project_models = [model for model in models if model["project_id"] == project_id]
+        if not project_models and project_record is None:
+            raise ValueError(f"Project '{project_id}' was not found.")
+
+        latest_model = self._latest_by_created_at(project_models)
+        champion_model = next(
+            (model for model in reversed(project_models) if model["status"] == "champion"),
+            None,
+        )
+        datasets_by_id = {
+            dataset["version_id"]: dataset
+            for dataset in datasets
+            if dataset["project_id"] == project_id
+        }
+
+        items = []
+        for model in sorted(project_models, key=lambda item: item["created_at"], reverse=True):
+            dataset = datasets_by_id.get(model["dataset_version_id"])
+            primary_metric = model["primary_metric"]
+            items.append(
+                {
+                    **{
+                        key: value
+                        for key, value in model.items()
+                        if key not in {"holdout_predictions", "training_artifacts"}
+                    },
+                    "metric_value": model["metrics"].get(primary_metric),
+                    "dataset_source_name": dataset["source_name"] if dataset else None,
+                    "dataset_rows": dataset["rows"] if dataset else None,
+                    "dataset_created_at": dataset["created_at"] if dataset else None,
+                    "holdout_rows": len(model.get("holdout_predictions") or []),
+                    "has_training_artifacts": bool(model.get("training_artifacts")),
+                    "is_latest": latest_model is not None and model["version_id"] == latest_model["version_id"],
+                    "is_champion": champion_model is not None and model["version_id"] == champion_model["version_id"],
+                }
+            )
+
+        return {
+            "project_id": project_id,
+            "project_name": project_record["name"] if project_record else project_id,
+            "latest_model_version_id": latest_model["version_id"] if latest_model else None,
+            "champion_model_version_id": champion_model["version_id"] if champion_model else None,
+            "items": items,
+        }
 
     def save_latest_comparison(self, comparison: dict[str, Any]) -> None:
         """Persist the latest compact comparison payload for the graph page."""

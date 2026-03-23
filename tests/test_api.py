@@ -175,6 +175,83 @@ def test_projects_endpoint_lists_created_and_inferred_projects(client: TestClien
     assert inferred_project["model_versions"] >= 1
 
 
+def test_project_models_history_endpoint_lists_versions(client: TestClient):
+    first_training = client.post(
+        "/training/run",
+        json={
+            "project_id": "models-history-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert first_training.status_code == 200
+
+    second_training = client.post(
+        "/training/run",
+        json={
+            "project_id": "models-history-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert second_training.status_code == 200
+
+    history_response = client.get("/projects/models-history-demo/models")
+    assert history_response.status_code == 200
+    body = history_response.json()
+    assert body["project_id"] == "models-history-demo"
+    assert body["latest_model_version_id"] == second_training.json()["model_version"]["version_id"]
+    assert len(body["items"]) == 2
+    assert body["items"][0]["version_id"] == second_training.json()["model_version"]["version_id"]
+    assert body["items"][0]["dataset_source_name"] == "inline"
+    assert body["items"][0]["metric_value"] is not None
+    assert "holdout_predictions" not in body["items"][0]
+    assert "training_artifacts" not in body["items"][0]
+    assert body["items"][0]["holdout_rows"] >= 1
+    assert body["items"][0]["has_training_artifacts"] is True
+
+
+def test_project_models_history_endpoint_can_activate_specific_version(client: TestClient):
+    first_training = client.post(
+        "/training/run",
+        json={
+            "project_id": "models-activate-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert first_training.status_code == 200
+    second_training = client.post(
+        "/training/run",
+        json={
+            "project_id": "models-activate-demo",
+            "target": "target",
+            "records": TRAINING_DATASET,
+        },
+    )
+    assert second_training.status_code == 200
+    history_before_activate = client.get("/projects/models-activate-demo/models")
+    assert history_before_activate.status_code == 200
+    before_body = history_before_activate.json()
+    inactive_item = next(item for item in before_body["items"] if not item["is_champion"])
+    previously_champion = before_body["champion_model_version_id"]
+    target_version = inactive_item["version_id"]
+
+    activate_response = client.post(f"/projects/models-activate-demo/models/{target_version}/activate")
+    assert activate_response.status_code == 200
+    assert activate_response.json()["version_id"] == target_version
+    assert activate_response.json()["status"] == "champion"
+
+    history_response = client.get("/projects/models-activate-demo/models")
+    assert history_response.status_code == 200
+    body = history_response.json()
+    assert body["champion_model_version_id"] == target_version
+    activated_item = next(item for item in body["items"] if item["version_id"] == target_version)
+    previous_champion_item = next(item for item in body["items"] if item["version_id"] == previously_champion)
+    assert activated_item["is_champion"] is True
+    assert previous_champion_item["status"] == "archived"
+
+
 def test_delete_project_removes_registry_records_and_storage(client: TestClient):
     train_response = client.post(
         "/training/run",
@@ -582,12 +659,20 @@ def test_latest_model_and_forecast_endpoints(client: TestClient):
     assert latest_model["version_id"] == trained_model_version
     assert latest_model["forecasting"]["available"] is True
     assert latest_model["project_id"] == "model-api-demo"
+    assert latest_model["holdout_predictions"]
+    assert latest_model["training_artifacts"]["holdout_rows"] == len(latest_model["holdout_predictions"])
+    assert latest_model["training_artifacts"]["feature_importances"]
+    assert latest_model["training_artifacts"]["training_options"]["effective"]["backend"]
 
     model_response = client.get(f"/models/{trained_model_version}")
     assert model_response.status_code == 200
     model_payload = model_response.json()
     assert model_payload["version_id"] == trained_model_version
     assert model_payload["target"] == "Электропотребление"
+    assert model_payload["holdout_predictions"]
+    assert model_payload["holdout_predictions"][0]["actual"] is not None
+    assert "prediction" in model_payload["holdout_predictions"][0]
+    assert model_payload["training_artifacts"]["forecasting"]["available"] is True
 
     forecast_response = client.get(
         f"/models/{trained_model_version}/forecast",

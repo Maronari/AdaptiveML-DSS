@@ -360,6 +360,8 @@ class PredictionService:
             "status": model["status"],
             "feature_names": model["feature_names"],
             "created_at": model["created_at"],
+            "holdout_predictions": list(model.get("holdout_predictions") or []),
+            "training_artifacts": dict(model.get("training_artifacts") or {}),
             "forecasting": {
                 "available": bool(forecasting.get("enabled")),
                 "default_horizon_minutes": forecasting.get("default_horizon_minutes"),

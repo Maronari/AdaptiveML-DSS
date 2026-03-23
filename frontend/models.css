@@ -1,0 +1,126 @@
+.models-shell {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 28px;
+}
+
+.models-page .models-board {
+    padding: 40px;
+}
+
+.models-page .models-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 24px;
+    padding: 30px;
+}
+
+.models-page .models-panel-head {
+    display: grid;
+    gap: 20px;
+}
+
+.models-page .models-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.models-page .models-summary-card {
+    display: grid;
+    gap: 8px;
+    padding: 18px 20px;
+    border: 2px solid #E5E7EB;
+    border-radius: 14px;
+    background: #F8F9FA;
+}
+
+.models-page .models-summary-label {
+    color: #6B7280;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.models-page .models-summary-card strong {
+    color: #2C3E50;
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.models-page .models-table-shell {
+    min-height: 0;
+    overflow: auto;
+    background: white;
+}
+
+.models-page .models-table-shell table {
+    min-width: 100%;
+}
+
+.models-page .model-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.models-page .model-status.champion {
+    color: #1f4f8c;
+    background: #dbeafe;
+}
+
+.models-page .model-status.latest {
+    color: #8a5a00;
+    background: #fef3c7;
+}
+
+.models-page .model-status.candidate {
+    color: #5b4b8a;
+    background: #ede9fe;
+}
+
+.models-page .model-status.archived {
+    color: #6b7280;
+    background: #f3f4f6;
+}
+
+.models-page .model-metric {
+    display: grid;
+    gap: 4px;
+}
+
+.models-page .model-metric small,
+.models-page .model-dataset-note {
+    color: #6B7280;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.models-page .model-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.models-page .model-actions .button {
+    min-height: 40px;
+    padding: 10px 16px;
+}
+
+@media (max-width: 1100px) {
+    .models-page .models-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .models-page .models-board,
+    .models-page .models-panel {
+        padding: 24px;
+    }
+}

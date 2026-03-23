@@ -56,6 +56,7 @@ const elements = {
   pointCountMax: document.getElementById("point-count-max"),
   intervalButtons: Array.from(document.querySelectorAll(".interval-button")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
 };
 
@@ -351,6 +352,14 @@ function updateLocation() {
 function syncNavigation(projectId) {
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.modelsLinks) {
+    const targetUrl = new URL("./models.html", window.location.href);
     if (projectId) {
       targetUrl.searchParams.set("project_id", projectId);
     }
