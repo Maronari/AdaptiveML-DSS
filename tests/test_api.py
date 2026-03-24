@@ -346,6 +346,190 @@ def test_training_from_xlsx_upload(client: TestClient):
     assert body["backend"] in {"lightautoml", "sklearn-fallback"}
 
 
+def test_dataset_inspect_file_suggests_target_for_semicolon_csv(client: TestClient):
+    frame = pd.DataFrame(build_hourly_energy_dataset())
+    target_column = frame.columns[-1]
+    csv_payload = frame.to_csv(index=False, sep=";").encode("cp1251")
+
+    response = client.post(
+        "/datasets/inspect/file",
+        files={
+            "file": (
+                "energy.csv",
+                csv_payload,
+                "text/csv",
+            )
+        },
+        data={"project_id": "upload-inspect-demo"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project_id"] == "upload-inspect-demo"
+    assert body["rows"] == len(frame)
+    assert body["recommended_target"] == "Потребление"
+    assert body["target_candidates"]
+    assert body["target_candidates"][0]["column"] == "Потребление"
+    assert "Температура" in body["columns"]
+    assert len(body["sample_rows"]) >= 1
+    assert body["column_type_summary"]["total_columns"] == 3
+    assert body["column_type_summary"]["items"][0]["kind"] == "numeric"
+    assert body["temporal_context"]["available"] is False
+    assert body["target_summaries"][target_column]["task_type"] == "regression"
+    assert body["project_context"]["project_id"] == "upload-inspect-demo"
+    assert body["project_context"]["is_new_project"] is True
+
+
+def test_dataset_inspect_file_returns_temporal_and_project_context(client: TestClient):
+    project_response = client.post("/projects", json={"name": "Upload Context Demo"})
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project_id"]
+
+    seed_frame = pd.DataFrame(build_timestamped_energy_dataset())
+    date_column = seed_frame.columns[0]
+    target_column = seed_frame.columns[-1]
+    seed_payload = BytesIO()
+    seed_frame.to_excel(seed_payload, index=False)
+    seed_payload.seek(0)
+
+    register_response = client.post(
+        "/datasets/register/file",
+        files={
+            "file": (
+                "seed.xlsx",
+                seed_payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": project_id, "target": target_column},
+    )
+    assert register_response.status_code == 201
+    dataset_version_id = register_response.json()["dataset_version"]["version_id"]
+
+    train_response = client.post(
+        "/training/run/dataset",
+        data={
+            "project_id": project_id,
+            "dataset_version_id": dataset_version_id,
+            "backend": "sklearn",
+        },
+    )
+    assert train_response.status_code == 200
+
+    inspect_frame = pd.DataFrame(build_timestamped_energy_dataset())
+    inspect_payload = BytesIO()
+    inspect_frame.to_excel(inspect_payload, index=False)
+    inspect_payload.seek(0)
+
+    inspect_response = client.post(
+        "/datasets/inspect/file",
+        files={
+            "file": (
+                "inspect.xlsx",
+                inspect_payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": project_id},
+    )
+    assert inspect_response.status_code == 200
+    body = inspect_response.json()
+    assert body["temporal_context"]["available"] is True
+    assert body["temporal_context"]["column"] == date_column
+    assert body["temporal_context"]["frequency_minutes"] == 240.0
+    assert body["target_summaries"][target_column]["numeric_stats"]["max"] > 0
+    assert body["project_context"]["dataset_versions"] == 1
+    assert body["project_context"]["model_versions"] == 1
+    assert body["project_context"]["latest_dataset_source_name"] == "seed.xlsx"
+    assert body["project_context"]["latest_model_version_id"] is not None
+
+
+def test_dataset_register_and_train_from_saved_dataset(client: TestClient):
+    frame = pd.DataFrame(TRAINING_DATASET)
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    register_response = client.post(
+        "/datasets/register/file",
+        files={
+            "file": (
+                "train.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "registered-dataset-demo", "target": "target"},
+    )
+    assert register_response.status_code == 201
+    register_body = register_response.json()
+    dataset_version_id = register_body["dataset_version"]["version_id"]
+
+    dataset_response = client.get(f"/datasets/{dataset_version_id}")
+    assert dataset_response.status_code == 200
+    dataset_body = dataset_response.json()
+    assert dataset_body["dataset_version"]["version_id"] == dataset_version_id
+    assert dataset_body["target"] == "target"
+
+    train_response = client.post(
+        "/training/run/dataset",
+        data={
+            "project_id": "registered-dataset-demo",
+            "dataset_version_id": dataset_version_id,
+            "backend": "sklearn",
+        },
+    )
+    assert train_response.status_code == 200
+    train_body = train_response.json()
+    assert train_body["dataset_version"]["version_id"] == dataset_version_id
+    assert train_body["backend"] == "sklearn-fallback"
+    assert train_body["model_version"]["status"] == "champion"
+
+
+def test_latest_project_dataset_endpoint_returns_newest_saved_dataset(client: TestClient):
+    first_frame = pd.DataFrame(TRAINING_DATASET[:4])
+    second_frame = pd.DataFrame(TRAINING_DATASET)
+
+    first_payload = BytesIO()
+    first_frame.to_excel(first_payload, index=False)
+    first_payload.seek(0)
+    second_payload = BytesIO()
+    second_frame.to_excel(second_payload, index=False)
+    second_payload.seek(0)
+
+    first_response = client.post(
+        "/datasets/register/file",
+        files={
+            "file": (
+                "first.xlsx",
+                first_payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "latest-dataset-demo", "target": "target"},
+    )
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        "/datasets/register/file",
+        files={
+            "file": (
+                "second.xlsx",
+                second_payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "latest-dataset-demo", "target": "target"},
+    )
+    assert second_response.status_code == 201
+
+    latest_response = client.get("/projects/latest-dataset-demo/datasets/latest")
+    assert latest_response.status_code == 200
+    latest_body = latest_response.json()
+    assert latest_body["dataset_version"]["version_id"] == second_response.json()["dataset_version"]["version_id"]
+    assert latest_body["rows"] == len(second_frame)
+    assert latest_body["source_name"] == "second.xlsx"
+
+
 def test_training_with_explicit_sklearn_options(client: TestClient):
     response = client.post(
         "/training/run",
@@ -795,6 +979,60 @@ def test_retraining_all_history_activates_better_candidate(client: TestClient):
     assert body["evaluation"]["profit"]["meets_threshold"] is True
     assert body["selection_summary"]["historical_rows_selected"] == 150
     assert body["selection_summary"]["new_rows_reserved_for_evaluation"] == 6
+
+
+def test_retraining_from_saved_dataset_version(client: TestClient):
+    dataset = build_retraining_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "retrain-dataset-version-demo",
+            "target": "target",
+            "records": dataset[:150],
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    new_frame = pd.DataFrame(dataset[150:])
+    payload = BytesIO()
+    new_frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    register_response = client.post(
+        "/datasets/register/file",
+        files={
+            "file": (
+                "retrain.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "retrain-dataset-version-demo", "target": "target"},
+    )
+    assert register_response.status_code == 201
+    dataset_version_id = register_response.json()["dataset_version"]["version_id"]
+
+    retrain_response = client.post(
+        "/retraining/run/dataset",
+        data={
+            "project_id": "retrain-dataset-version-demo",
+            "dataset_version_id": dataset_version_id,
+            "backend": "sklearn",
+            "enable_forecast": "false",
+            "history_scope": "all_history",
+            "minimum_relative_improvement": "0.01",
+        },
+    )
+    assert retrain_response.status_code == 200
+    body = retrain_response.json()
+    assert body["dataset_version"]["project_id"] == "retrain-dataset-version-demo"
+    assert body["candidate_model_version"]["version_id"]
 
 
 def test_retraining_recent_window_uses_last_30_days_history(client: TestClient):

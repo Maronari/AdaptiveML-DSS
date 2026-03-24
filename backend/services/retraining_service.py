@@ -222,6 +222,31 @@ class RetrainingService:
             retraining_options=retraining_options,
         )
 
+    def retrain_from_dataset_version(
+        self,
+        project_id: str,
+        dataset_version_id: str,
+        training_options: dict[str, Any] | None = None,
+        retraining_options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Retrain a challenger model from a stored labeled dataset version."""
+        dataset_version = self.registry_service.get_dataset_version(dataset_version_id)
+        if dataset_version["project_id"] != project_id:
+            raise ValueError(
+                f"Dataset version '{dataset_version_id}' does not belong to project '{project_id}'."
+            )
+
+        frame = self.registry_service.load_dataset_version_frame(dataset_version_id)
+        records = frame.to_dict(orient="records")
+        return self.retrain(
+            project_id=project_id,
+            target=dataset_version["target"],
+            records=records,
+            source_name=dataset_version["source_name"],
+            training_options=training_options,
+            retraining_options=retraining_options,
+        )
+
     def _build_candidate_and_evaluation_frames(
         self,
         historical_frame: pd.DataFrame,

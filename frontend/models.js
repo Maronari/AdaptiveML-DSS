@@ -16,6 +16,7 @@ const elements = {
   latestId: document.getElementById("models-latest-id"),
   tableBody: document.getElementById("models-table-body"),
   tableEmpty: document.getElementById("models-table-empty"),
+  uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
@@ -121,6 +122,14 @@ async function postJson(path) {
 
 function syncNavigation(projectId, versionId = "") {
   const normalizedProjectId = projectId.trim();
+
+  for (const link of elements.uploadLinks) {
+    const targetUrl = new URL("./upload.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
 
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);

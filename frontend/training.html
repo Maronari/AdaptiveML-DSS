@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Обучение модели</title>
-    <link rel="stylesheet" href="./styles.css?v=20260323-0300" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260323-0300" />
+    <link rel="stylesheet" href="./styles.css?v=20260324-2210" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260324-2210" />
   </head>
   <body class="training-page">
     <main class="page-shell training-shell">
@@ -16,6 +16,7 @@
         </div>
         <div class="page-actions">
           <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./upload.html" class="button button-secondary" data-nav-upload>Данные</a>
           <a href="./training.html" class="button button-primary" data-nav-training>Обучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
@@ -38,19 +39,14 @@
           </div>
 
           <form id="workflow-form" class="training-form-grid">
-            <label class="field field-span-1">
-              <span>ID проекта</span>
-              <input id="project-id" name="project_id" value="demo" />
-            </label>
+            <input id="project-id" name="project_id" type="hidden" value="demo" />
+            <input id="dataset-version-id" name="dataset_version_id" type="hidden" />
+
+            <div id="dataset-selection-note" class="static-note field-span-4"></div>
 
             <label class="field field-span-1">
               <span>Целевая колонка</span>
-              <input id="target-column" name="target" placeholder="Например: target" />
-            </label>
-
-            <label class="field file-field field-span-2">
-              <span>Файл датасета</span>
-              <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" />
+              <input id="target-column" name="target" readonly />
             </label>
 
             <label class="field field-span-1">
@@ -174,6 +170,6 @@
       </section>
     </main>
 
-    <script type="module" src="./training.js?v=20260323-1545"></script>
+    <script type="module" src="./training.js?v=20260324-2210"></script>
   </body>
 </html>

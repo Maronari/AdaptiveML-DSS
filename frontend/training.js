@@ -2,12 +2,15 @@ const state = {
   validation: null,
   training: null,
   retraining: null,
+  datasetSummary: null,
   busy: false,
 };
 
 const elements = {
-  fileInput: document.getElementById("dataset-file"),
+  datasetVersionInput: document.getElementById("dataset-version-id"),
+  datasetSelectionNote: document.getElementById("dataset-selection-note"),
   projectIdInput: document.getElementById("project-id"),
+  uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
@@ -34,7 +37,8 @@ const elements = {
 function getPageContext() {
   const searchParams = new URLSearchParams(window.location.search);
   return {
-    projectId: searchParams.get("project_id")?.trim() || "",
+    projectId: searchParams.get("project_id")?.trim() || "demo",
+    datasetVersionId: searchParams.get("dataset_version_id")?.trim() || "",
   };
 }
 
@@ -44,7 +48,7 @@ function selectedAlgorithms() {
 
 function getWorkflowState() {
   return {
-    file: elements.fileInput.files?.[0] ?? null,
+    datasetVersionId: elements.datasetVersionInput.value.trim(),
     projectId: elements.projectIdInput.value.trim() || "demo",
     target: elements.targetInput.value.trim(),
     trainingOptions: {
@@ -70,7 +74,7 @@ function getWorkflowState() {
 function setBusy(isBusy) {
   state.busy = isBusy;
   for (const button of [elements.validateButton, elements.trainButton, elements.retrainButton]) {
-    button.disabled = isBusy;
+    button.disabled = isBusy || !state.datasetSummary;
   }
 }
 
@@ -126,19 +130,19 @@ function formatMetricValue(value) {
   return String(value);
 }
 
-function requireFileAndTarget() {
+function requireDatasetWorkflow() {
   const workflow = getWorkflowState();
-  if (!workflow.file) {
-    throw new Error("Выберите файл CSV или XLSX.");
+  if (!workflow.datasetVersionId || !state.datasetSummary) {
+    throw new Error("Сначала загрузите датасет на странице «Данные».");
   }
   if (!workflow.target) {
-    throw new Error("Укажите имя целевой колонки.");
+    throw new Error("Не удалось определить target для выбранного датасета.");
   }
   return workflow;
 }
 
 function requireTrainingWorkflow() {
-  const workflow = requireFileAndTarget();
+  const workflow = requireDatasetWorkflow();
   if (!Number.isFinite(workflow.trainingOptions.timeout_seconds) || workflow.trainingOptions.timeout_seconds < 5) {
     throw new Error("Таймаут обучения должен быть не меньше 5 секунд.");
   }
@@ -196,17 +200,27 @@ function extractErrorMessage(payload, response) {
   return response.statusText || "Ошибка запроса.";
 }
 
-async function postFile(
-  path,
-  { file, projectId, target, includeTarget = false, trainingOptions = null, retrainingOptions = null },
-) {
-  appendLog(`Отправляю запрос ${path} для проекта "${projectId}" и файла "${file?.name ?? "-"}".`);
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("project_id", projectId);
-  if (includeTarget) {
-    formData.append("target", target);
+async function fetchJson(path) {
+  const response = await fetch(path, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(payload, response));
   }
+  return payload;
+}
+
+async function postDatasetVersion(
+  path,
+  { projectId, datasetVersionId, trainingOptions = null, retrainingOptions = null },
+) {
+  appendLog(`Отправляю запрос ${path} для проекта "${projectId}" и датасета "${datasetVersionId}".`);
+  const formData = new FormData();
+  formData.append("project_id", projectId);
+  formData.append("dataset_version_id", datasetVersionId);
   if (trainingOptions) {
     formData.append("task_type", trainingOptions.task_type);
     formData.append("backend", trainingOptions.backend);
@@ -296,11 +310,23 @@ function preferredForecastSteps() {
 
 function syncProjectNavigation(projectId) {
   const normalizedProjectId = projectId.trim();
+  const datasetVersionId = elements.datasetVersionInput.value.trim();
+
+  for (const link of elements.uploadLinks) {
+    const targetUrl = new URL("./upload.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
 
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);
     if (normalizedProjectId) {
       targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    if (datasetVersionId) {
+      targetUrl.searchParams.set("dataset_version_id", datasetVersionId);
     }
     link.href = targetUrl.toString();
   }
@@ -335,6 +361,25 @@ function redirectToGraph(projectId, versionId, forecasting = null) {
   window.location.assign(targetUrl.toString());
 }
 
+function applyDatasetSummary(summary) {
+  state.datasetSummary = summary;
+  elements.datasetVersionInput.value = summary.dataset_version.version_id;
+  elements.projectIdInput.value = summary.project_id;
+  elements.targetInput.value = summary.target;
+  elements.datasetSelectionNote.textContent =
+    `Подключён датасет ${summary.dataset_version.version_id} (${summary.source_name}, ${summary.rows} строк, ${summary.columns.length} колонок).`;
+  syncProjectNavigation(summary.project_id);
+  setBusy(false);
+}
+
+function clearDatasetSummary(message) {
+  state.datasetSummary = null;
+  elements.datasetVersionInput.value = "";
+  elements.targetInput.value = "";
+  elements.datasetSelectionNote.textContent = message;
+  setBusy(false);
+}
+
 async function runAction(actionName, action) {
   try {
     setBusy(true);
@@ -344,27 +389,21 @@ async function runAction(actionName, action) {
   } catch (error) {
     appendLog(normalizeError(error), "error");
     setStatus("error", normalizeError(error));
-  } finally {
     setBusy(false);
   }
 }
 
 async function handleValidate() {
-  const workflow = requireFileAndTarget();
-  appendLog(`Проверяю датасет "${workflow.file.name}" с target="${workflow.target}".`);
-  state.validation = await postFile("/datasets/validate/file", {
-    ...workflow,
-    includeTarget: true,
-  });
-  setStatus("success", `Датасет проверен: ${state.validation.rows} строк, тип=${state.validation.task_type}.`);
+  const workflow = requireDatasetWorkflow();
+  state.validation = state.datasetSummary;
+  setStatus("success", `Датасет готов: ${workflow.target}, ${state.validation.rows} строк.`);
 }
 
 async function handleTrain() {
   const workflow = requireTrainingWorkflow();
-  appendLog(`Запускаю обучение для проекта "${workflow.projectId}" с target="${workflow.target}".`);
-  state.training = await postFile("/training/run/file", {
+  appendLog(`Запускаю обучение для проекта "${workflow.projectId}" по датасету "${workflow.datasetVersionId}".`);
+  state.training = await postDatasetVersion("/training/run/dataset", {
     ...workflow,
-    includeTarget: true,
     trainingOptions: workflow.trainingOptions,
   });
   state.retraining = null;
@@ -378,10 +417,9 @@ async function handleTrain() {
 
 async function handleRetrain() {
   const workflow = requireRetrainingWorkflow();
-  appendLog(`Запускаю переобучение для проекта "${workflow.projectId}" с target="${workflow.target}".`);
-  state.retraining = await postFile("/retraining/run/file", {
+  appendLog(`Запускаю переобучение для проекта "${workflow.projectId}" по датасету "${workflow.datasetVersionId}".`);
+  state.retraining = await postDatasetVersion("/retraining/run/dataset", {
     ...workflow,
-    includeTarget: true,
     trainingOptions: workflow.trainingOptions,
     retrainingOptions: workflow.retrainingOptions,
   });
@@ -392,6 +430,13 @@ async function handleRetrain() {
     state.retraining.candidate_model_version.version_id,
     state.retraining.forecasting,
   );
+}
+
+async function resolveDatasetSummary(pageContext) {
+  if (pageContext.datasetVersionId) {
+    return fetchJson(`/datasets/${encodeURIComponent(pageContext.datasetVersionId)}`);
+  }
+  return fetchJson(`/projects/${encodeURIComponent(pageContext.projectId)}/datasets/latest`);
 }
 
 elements.validateButton.addEventListener("click", () => {
@@ -410,15 +455,34 @@ elements.backendInput.addEventListener("change", () => {
   syncTrainingControls();
 });
 
-elements.projectIdInput.addEventListener("input", () => {
-  syncProjectNavigation(elements.projectIdInput.value);
-});
-
-const pageContext = getPageContext();
-if (pageContext.projectId) {
+async function initializePage() {
+  const pageContext = getPageContext();
   elements.projectIdInput.value = pageContext.projectId;
+  syncTrainingControls();
+  syncProjectNavigation(pageContext.projectId);
+  setBusy(false);
+  setStatus("idle", "Готово.");
+  clearDatasetSummary("Загрузка выбранного датасета...");
+
+  appendLog("Загружаю датасет для страницы обучения.");
+  try {
+    const summary = await resolveDatasetSummary(pageContext);
+    applyDatasetSummary(summary);
+    setStatus(
+      "success",
+      `Подключён датасет ${summary.dataset_version.version_id}: ${summary.rows} строк, target=${summary.target}.`,
+    );
+    appendLog(`Датасет ${summary.dataset_version.version_id} подключён к странице обучения.`);
+  } catch (error) {
+    clearDatasetSummary("Сначала загрузите датасет на странице «Данные», затем вернитесь к обучению.");
+    setStatus("error", normalizeError(error));
+    appendLog(normalizeError(error), "error");
+    for (const button of [elements.validateButton, elements.trainButton, elements.retrainButton]) {
+      button.disabled = true;
+    }
+  }
+
+  appendLog("Страница обучения готова.");
 }
 
-syncProjectNavigation(elements.projectIdInput.value);
-syncTrainingControls();
-appendLog("Страница обучения готова.");
+initializePage();

@@ -33,6 +33,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -511,7 +515,7 @@ body.projects-page {
   border-radius: 18px;
   color: var(--ink);
   line-height: 1.45;
-  background: linear-gradient(180deg, #ffffff, rgba(63, 124, 255, 0.04));
+  background: var(--surface);
 }
 
 .training-board {
@@ -805,6 +809,182 @@ body.projects-page {
   margin: 0;
 }
 
+.upload-panel {
+  min-height: 0;
+}
+
+.upload-content {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.upload-sidebar {
+  display: grid;
+  grid-template-rows: max-content max-content;
+  align-content: start;
+  align-items: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.upload-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.upload-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-self: start;
+  gap: 8px;
+}
+
+.upload-summary-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.upload-summary-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.upload-summary-card strong {
+  color: var(--ink-strong);
+  font-size: 0.96rem;
+  line-height: 1.1;
+}
+
+.upload-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.upload-detail-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 168px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.upload-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-detail-title {
+  color: var(--ink-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.upload-detail-lines {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.upload-detail-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(50, 70, 97, 0.08);
+}
+
+.upload-detail-line:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.upload-detail-line-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.upload-detail-line-value {
+  color: var(--ink-strong);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.upload-detail-line-value.is-accent {
+  color: var(--accent-strong);
+}
+
+.upload-detail-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.upload-column-heading,
+.upload-preview-heading {
+  margin-bottom: 10px;
+}
+
+.upload-preview-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.upload-table-shell {
+  min-height: 0;
+  height: 100%;
+}
+
+.upload-table-shell table {
+  min-width: max-content;
+}
+
+.upload-table-shell th,
+.upload-table-shell td {
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-status-row {
+  display: block;
+}
+
+.upload-status-row .status-banner {
+  margin: 0;
+}
+
 .toggle,
 .algo-chip {
   border: 1px solid var(--line);
@@ -1068,6 +1248,17 @@ body.projects-page {
   color: var(--muted);
 }
 
+.table-placeholder-loading {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  /* color: var(--accent-strong); */
+  font-size: clamp(1.55rem, 2.6vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-align: center;
+}
+
 .chart-panel {
   overflow: hidden;
 }
@@ -1328,6 +1519,13 @@ body.projects-page {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .upload-content,
+  .upload-sidebar {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    overflow: auto;
+  }
+
   .projects-panel-head {
     flex-direction: column;
   }
@@ -1392,6 +1590,12 @@ body.projects-page {
 
   .training-form-grid,
   .algo-grid-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-form-grid,
+  .upload-summary-grid,
+  .upload-detail-grid {
     grid-template-columns: 1fr;
   }
 

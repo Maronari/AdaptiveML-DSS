@@ -78,8 +78,8 @@ function setModalStatus(message, kind = "idle") {
   projectModalStatus.dataset.kind = kind;
 }
 
-function trainingUrl(projectId) {
-  const targetUrl = new URL("./training.html", window.location.href);
+function uploadUrl(projectId) {
+  const targetUrl = new URL("./upload.html", window.location.href);
   targetUrl.searchParams.set("project_id", projectId);
   return targetUrl.toString();
 }
@@ -104,7 +104,7 @@ function openProject(projectId) {
     return;
   }
 
-  window.location.assign(trainingUrl(project.project_id));
+  window.location.assign(uploadUrl(project.project_id));
 }
 
 function renderCards() {
@@ -199,7 +199,7 @@ async function createProject() {
     });
     closeModal(true);
     await loadProjects();
-    window.location.assign(trainingUrl(project.project_id));
+    window.location.assign(uploadUrl(project.project_id));
   } catch (error) {
     setModalStatus(error instanceof Error ? error.message : String(error), "error");
   } finally {

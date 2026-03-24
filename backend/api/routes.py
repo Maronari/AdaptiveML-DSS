@@ -118,6 +118,56 @@ async def validate_dataset_file(
         raise _bad_request(exc) from exc
 
 
+@router.post("/datasets/inspect/file", tags=["datasets"])
+async def inspect_dataset_file(
+    file: UploadFile = File(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Inspect an uploaded dataset before the user selects the target."""
+    try:
+        return await dataset_service.inspect_uploaded_dataset(
+            project_id=project_id,
+            upload=file,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/datasets/register/file", tags=["datasets"], status_code=status.HTTP_201_CREATED)
+async def register_dataset_file(
+    file: UploadFile = File(...),
+    target: str = Form(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Persist an uploaded dataset version after target confirmation."""
+    try:
+        return await dataset_service.register_uploaded_dataset(
+            project_id=project_id,
+            target=target,
+            upload=file,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/datasets/{version_id}", tags=["datasets"])
+def get_registered_dataset(version_id: str) -> dict[str, Any]:
+    """Return a saved dataset summary for the training page."""
+    try:
+        return dataset_service.get_registered_dataset_summary(version_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/projects/{project_id}/datasets/latest", tags=["datasets"])
+def get_latest_project_dataset(project_id: str) -> dict[str, Any]:
+    """Return the newest saved dataset summary for one project."""
+    try:
+        return dataset_service.get_latest_project_dataset_summary(project_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/training/run", tags=["training"])
 def run_training(payload: TrainRequest) -> dict[str, Any]:
     """Train a model from inline records."""
@@ -192,6 +242,41 @@ async def run_training_file(
         raise _bad_request(exc) from exc
 
 
+@router.post("/training/run/dataset", tags=["training"])
+def run_training_dataset(
+    dataset_version_id: str = Form(...),
+    project_id: str = Form("default"),
+    task_type: str = Form("auto"),
+    backend: str = Form("auto"),
+    preset: str = Form("tabular"),
+    algos: str = Form("lgb,linear_l2"),
+    timeout_seconds: int = Form(30),
+    cpu_limit: int = Form(1),
+    test_size: float = Form(0.2),
+    cv_folds: int = Form(0),
+    enable_forecast: bool = Form(True),
+) -> dict[str, Any]:
+    """Train a model from a previously saved dataset version."""
+    try:
+        return training_service.train_from_dataset_version(
+            project_id=project_id,
+            dataset_version_id=dataset_version_id,
+            training_options={
+                "task_type": task_type,
+                "backend": backend,
+                "preset": preset,
+                "algos": algos,
+                "timeout_seconds": timeout_seconds,
+                "cpu_limit": cpu_limit,
+                "test_size": test_size,
+                "cv_folds": cv_folds,
+                "enable_forecast": enable_forecast,
+            },
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/retraining/run", tags=["training"])
 def run_retraining(payload: RetrainRequest) -> dict[str, Any]:
     """Retrain a challenger model from inline labeled records."""
@@ -233,6 +318,51 @@ async def run_retraining_file(
             project_id=project_id,
             target=target,
             upload=file,
+            training_options={
+                "task_type": task_type,
+                "backend": backend,
+                "preset": preset,
+                "algos": algos,
+                "timeout_seconds": timeout_seconds,
+                "cpu_limit": cpu_limit,
+                "test_size": test_size,
+                "cv_folds": cv_folds,
+                "enable_forecast": enable_forecast,
+            },
+            retraining_options={
+                "history_scope": history_scope,
+                "minimum_relative_improvement": minimum_relative_improvement,
+                "evaluation_fraction": evaluation_fraction,
+                "auto_activate": auto_activate,
+            },
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/retraining/run/dataset", tags=["training"])
+def run_retraining_dataset(
+    dataset_version_id: str = Form(...),
+    project_id: str = Form("default"),
+    task_type: str = Form("auto"),
+    backend: str = Form("auto"),
+    preset: str = Form("tabular"),
+    algos: str = Form("lgb,linear_l2"),
+    timeout_seconds: int = Form(30),
+    cpu_limit: int = Form(1),
+    test_size: float = Form(0.2),
+    cv_folds: int = Form(0),
+    enable_forecast: bool = Form(True),
+    history_scope: str = Form("all_history"),
+    minimum_relative_improvement: float = Form(0.03),
+    evaluation_fraction: float = Form(0.2),
+    auto_activate: bool = Form(True),
+) -> dict[str, Any]:
+    """Retrain a challenger model from a previously saved dataset version."""
+    try:
+        return retraining_service.retrain_from_dataset_version(
+            project_id=project_id,
+            dataset_version_id=dataset_version_id,
             training_options={
                 "task_type": task_type,
                 "backend": backend,

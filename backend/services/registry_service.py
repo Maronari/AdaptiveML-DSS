@@ -71,6 +71,15 @@ class RegistryService:
                 return dataset
         raise ValueError(f"Dataset version '{version_id}' was not found.")
 
+    def get_latest_dataset_version(self, project_id: str) -> dict[str, Any]:
+        """Return the newest dataset version record for a project."""
+        datasets = self.registry.read("datasets")
+        project_datasets = [dataset for dataset in datasets if dataset["project_id"] == project_id]
+        latest = self._latest_by_created_at(project_datasets)
+        if latest is None:
+            raise ValueError(f"No dataset versions found for project '{project_id}'.")
+        return latest
+
     def register_model_version(
         self,
         project_id: str,
@@ -345,6 +354,65 @@ class RegistryService:
             )
 
         return sorted(summaries, key=lambda item: item["latest_activity_at"], reverse=True)
+
+    def get_project_summary(self, project_id: str) -> dict[str, Any]:
+        """Return one project summary including latest dataset/model references."""
+        project_records = self.registry.read("projects")
+        datasets = self.registry.read("datasets")
+        models = self.registry.read("models")
+
+        project_record = next((project for project in project_records if project["project_id"] == project_id), None)
+        project_datasets = [dataset for dataset in datasets if dataset["project_id"] == project_id]
+        project_models = [model for model in models if model["project_id"] == project_id]
+        latest_dataset = self._latest_by_created_at(project_datasets)
+        latest_model = self._latest_by_created_at(project_models)
+        champion_model = next(
+            (model for model in reversed(project_models) if model["status"] == "champion"),
+            None,
+        )
+
+        created_candidates = [
+            value
+            for value in (
+                project_record["created_at"] if project_record else None,
+                latest_dataset["created_at"] if latest_dataset else None,
+                latest_model["created_at"] if latest_model else None,
+            )
+            if value is not None
+        ]
+        latest_activity_candidates = [
+            value
+            for value in (
+                latest_dataset["created_at"] if latest_dataset else None,
+                latest_model["created_at"] if latest_model else None,
+            )
+            if value is not None
+        ]
+
+        return {
+            "project_id": project_id,
+            "name": project_record["name"] if project_record else project_id,
+            "created_at": min(created_candidates) if created_candidates else None,
+            "latest_activity_at": max(latest_activity_candidates) if latest_activity_candidates else None,
+            "dataset_versions": len(project_datasets),
+            "model_versions": len(project_models),
+            "target": (
+                latest_model["target"]
+                if latest_model
+                else latest_dataset["target"] if latest_dataset else None
+            ),
+            "task_type": latest_model["task_type"] if latest_model else None,
+            "latest_dataset_version_id": latest_dataset["version_id"] if latest_dataset else None,
+            "latest_dataset_source_name": latest_dataset["source_name"] if latest_dataset else None,
+            "latest_dataset_created_at": latest_dataset["created_at"] if latest_dataset else None,
+            "latest_model_version_id": latest_model["version_id"] if latest_model else None,
+            "latest_model_created_at": latest_model["created_at"] if latest_model else None,
+            "champion_model_version_id": champion_model["version_id"] if champion_model else None,
+            "has_project_record": project_record is not None,
+            "has_datasets": bool(project_datasets),
+            "has_models": bool(project_models),
+            "has_champion_model": champion_model is not None,
+        }
 
     def delete_project(self, project_id: str) -> dict[str, Any]:
         """Delete one project together with all related registry records and stored files."""

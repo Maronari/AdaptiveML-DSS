@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS - Загрузка данных</title>
+    <link rel="stylesheet" href="./styles.css?v=20260325-0200" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260325-0200" />
+  </head>
+  <body class="training-page upload-page">
+    <main class="page-shell training-shell">
+      <header class="app-header training-header">
+        <div class="app-header-copy">
+          <h1>AutoML</h1>
+          <p class="page-subtitle">Загрузка датасета и выбор целевой колонки</p>
+        </div>
+        <div class="page-actions">
+          <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./upload.html" class="button button-primary" data-nav-upload>Данные</a>
+          <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
+          <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+        </div>
+      </header>
+
+      <section class="workspace-board workspace-board-single training-board">
+        <section class="panel training-panel training-panel-compact upload-panel">
+          <div class="training-panel-head">
+            <div class="panel-heading training-panel-heading">
+              <p class="eyebrow">Данные</p>
+              <h2>Загрузка новой версии датасета</h2>
+            </div>
+
+            <div class="training-action-strip">
+              <button type="button" id="continue-button" class="button button-primary" disabled>К обучению</button>
+            </div>
+          </div>
+
+          <section class="upload-content">
+            <div class="upload-sidebar">
+              <form id="upload-form" class="training-form-grid upload-form-grid">
+                <label class="field field-span-1">
+                  <span>Файл датасета</span>
+                  <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" />
+                </label>
+
+                <label class="field field-span-1">
+                  <span>Целевая колонка</span>
+                  <select id="target-column" name="target">
+                    <option value=""></option>
+                  </select>
+                </label>
+              </form>
+
+              <div class="upload-summary-grid">
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Строк</span>
+                  <strong id="summary-rows">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Колонок</span>
+                  <strong id="summary-columns">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Дубликатов</span>
+                  <strong id="summary-duplicates">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Источник</span>
+                  <strong id="summary-source">—</strong>
+                </article>
+              </div>
+
+              <div class="upload-detail-grid">
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Типы колонок</span>
+                  </div>
+                  <div id="column-types-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Загрузите файл, чтобы увидеть состав схемы.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Временной контекст</span>
+                  </div>
+                  <div id="temporal-context-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Временная шкала появится после разбора файла.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Сводка по target</span>
+                  </div>
+                  <div id="target-summary-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Выберите целевую колонку после автозагрузки.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Связь с проектом</span>
+                  </div>
+                  <div id="project-context-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Контекст проекта появится после разбора файла.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <section class="panel upload-preview-panel">
+              <div class="panel-heading upload-preview-heading">
+                <p class="eyebrow">Preview</p>
+              </div>
+              <div class="table-shell upload-table-shell">
+                <table id="upload-preview-table">
+                  <thead id="upload-preview-head"></thead>
+                  <tbody id="upload-preview-body"></tbody>
+                </table>
+                <div id="upload-preview-empty" class="table-placeholder">
+                  Загрузите CSV или Excel, и страница сразу выполнит разбор файла.
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <div class="upload-status-row">
+            <div id="status-banner" class="status-banner status-idle">Готово.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./upload.js?v=20260325-0200"></script>
+  </body>
+</html>

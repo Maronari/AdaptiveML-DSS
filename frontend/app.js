@@ -53,6 +53,7 @@ const elements = {
   pointCountValue: document.getElementById("point-count-value"),
   pointCountMin: document.getElementById("point-count-min"),
   pointCountMax: document.getElementById("point-count-max"),
+  uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
@@ -365,6 +366,14 @@ function updateLocation() {
 }
 
 function syncNavigation(projectId) {
+  for (const link of elements.uploadLinks) {
+    const targetUrl = new URL("./upload.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);
     if (projectId) {

@@ -4,19 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoML</title>
-    <link rel="stylesheet" href="./prototype/style.css?v=20260323-1554">
-    <link rel="stylesheet" href="./styles.css?v=20260323-1554">
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260323-1554">
-    <link rel="stylesheet" href="./projects.css?v=20260323-1554">
+    <link rel="stylesheet" href="./prototype/style.css?v=20260324-2210">
+    <link rel="stylesheet" href="./styles.css?v=20260324-2210">
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260324-2210">
+    <link rel="stylesheet" href="./projects.css?v=20260324-2210">
 </head>
 <body class="training-page projects-page">
     <header class="app-header projects-header">
         <div class="app-header-copy">
             <h1>AutoML</h1>
-            <p class="page-subtitle">Выбор проекта и переход к обучению или графику</p>
+            <p class="page-subtitle">Выбор проекта и переход к загрузке данных, обучению или графику</p>
         </div>
         <div class="page-actions">
             <a href="./index.html" class="button button-primary">Проекты</a>
+            <a href="./upload.html" class="button button-secondary">Данные</a>
             <a href="./training.html" class="button button-secondary">Обучение</a>
             <a href="./models.html" class="button button-secondary">История моделей</a>
             <a href="./graph.html" class="button button-secondary">График</a>
@@ -27,7 +28,7 @@
     <div class="container" id="container"></div>
 
     <div id="projectsEmpty" class="empty-state" hidden>
-        В реестре пока нет проектов. Создайте новый проект и перейдите к обучению.
+        В реестре пока нет проектов. Создайте новый проект и перейдите к загрузке данных.
     </div>
 
     <div class="modal" id="newProjectModal">
@@ -45,6 +46,6 @@
         </div>
     </div>
 
-    <script type="module" src="./projects.js?v=20260323-1554"></script>
+    <script type="module" src="./projects.js?v=20260324-2210"></script>
 </body>
 </html>
