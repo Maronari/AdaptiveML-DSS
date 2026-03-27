@@ -42,12 +42,30 @@ class Settings(BaseSettings):
         """Return the SQLite database path for registry metadata."""
         return self.storage_root / "registry.sqlite3"
 
+    @property
+    def jobs_dir(self) -> Path:
+        """Return the directory that stores background-job artifacts."""
+        return self.storage_root / "jobs"
+
+    @property
+    def monitoring_dir(self) -> Path:
+        """Return the directory that stores monitoring reports."""
+        return self.artifacts_dir / "monitoring"
+
+    @property
+    def mlflow_tracking_dir(self) -> Path:
+        """Return the local MLflow tracking directory."""
+        return self.storage_root / "mlruns"
+
     def ensure_directories(self) -> None:
         """Create all required storage directories if they are missing."""
         for path in (
             self.storage_root,
             self.datasets_dir,
             self.artifacts_dir,
+            self.jobs_dir,
+            self.monitoring_dir,
+            self.mlflow_tracking_dir,
             self.registry_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)

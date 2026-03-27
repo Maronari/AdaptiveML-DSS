@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS</title>
-    <link rel="stylesheet" href="./styles.css?v=20260324-2210" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260324-2210" />
+    <link rel="stylesheet" href="./styles.css?v=20260327-0240" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260327-0240" />
   </head>
   <body class="graph-page">
     <main class="page-shell graph-shell">
@@ -20,6 +20,7 @@
           <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
           <a href="./graph.html" class="button button-primary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
         </div>
       </header>
 
@@ -85,6 +86,38 @@
                 <p id="chart-range-note" class="chart-range-note">
                   Страница показывает историю и прогноз выбранной версии модели.
                 </p>
+                <div id="selected-model-summary" class="selected-model-summary" hidden>
+                  <span class="selected-model-chip">
+                    <strong>Версия</strong>
+                    <span id="selected-model-version">—</span>
+                  </span>
+                  <span class="selected-model-chip">
+                    <strong>Статус</strong>
+                    <span id="selected-model-status">—</span>
+                  </span>
+                  <span class="selected-model-chip">
+                    <strong>Цель</strong>
+                    <span id="selected-model-target">—</span>
+                  </span>
+                  <span class="selected-model-chip">
+                    <strong>Метрика</strong>
+                    <span id="selected-model-metric">—</span>
+                  </span>
+                </div>
+                <div id="graph-metrics-summary" class="graph-metrics-summary" hidden>
+                  <section class="graph-metrics-group">
+                    <div class="graph-metrics-head">
+                      <strong>Метрики модели</strong>
+                    </div>
+                    <div id="graph-model-metrics-grid" class="graph-metrics-grid"></div>
+                  </section>
+                  <section class="graph-metrics-group">
+                    <div class="graph-metrics-head">
+                      <strong>Метрики forecasting</strong>
+                    </div>
+                    <div id="graph-forecast-metrics-grid" class="graph-metrics-grid"></div>
+                  </section>
+                </div>
               </div>
               <div class="chart-toolbar-actions">
                 <button type="button" id="chart-reset-button" class="button button-secondary button-compact" disabled>
@@ -105,6 +138,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260324-2210"></script>
+    <script type="module" src="./app.js?v=20260327-0240"></script>
   </body>
 </html>

@@ -1,0 +1,266 @@
+{
+  "default_rule_set": "inline_default",
+  "rule_sets": {
+    "inline_default": {
+      "description": "General-purpose inline DSS rules for explained inference rows.",
+      "scenarios": {
+        "manual_review": [
+          "Снизить нагрузку на систему или объект наблюдения.",
+          "Провести ручную проверку кейса.",
+          "Назначить внеплановую диагностику по ведущим факторам."
+        ],
+        "targeted_diagnostics": [
+          "Проверить факторы со средним и высоким вкладом.",
+          "Пересчитать прогноз после корректирующих действий.",
+          "Подготовить кейс к возможному retraining после верификации."
+        ],
+        "preventive_maintenance": [
+          "Назначить профилактическую проверку на ближайшее окно обслуживания.",
+          "Проверить узлы, связанные с отрицательными факторами.",
+          "Зафиксировать кейс для последующего анализа деградации."
+        ],
+        "stabilization_review": [
+          "Подтвердить корректность входных данных и источников телеметрии.",
+          "Проверить, не связано ли снижение риска с временной аномалией наблюдения.",
+          "Сравнить кейс с соседними измерениями перед закрытием инцидента."
+        ],
+        "observe": [
+          "Продолжить наблюдение без немедленного вмешательства.",
+          "Собрать дополнительные данные для drift-monitoring."
+        ]
+      },
+      "rules": [
+        {
+          "rule_id": "inline_high_manual_review",
+          "priority": 100,
+          "summary": "High-risk case requires immediate mitigation and manual review.",
+          "scenario": "manual_review",
+          "conditions": {
+            "risk_level_in": ["high"]
+          }
+        },
+        {
+          "rule_id": "inline_medium_escalated_manual_review",
+          "priority": 90,
+          "summary": "Medium-risk case is escalated because strong positive factors indicate unstable behavior.",
+          "scenario": "manual_review",
+          "conditions": {
+            "risk_level_in": ["medium"],
+            "strong_positive_count_min": 1
+          }
+        },
+        {
+          "rule_id": "inline_medium_preventive_maintenance",
+          "priority": 80,
+          "summary": "Medium-risk case should be routed to preventive maintenance and targeted diagnostics.",
+          "scenario": "preventive_maintenance",
+          "conditions": {
+            "risk_level_in": ["medium"],
+            "negative_count_min": 2
+          }
+        },
+        {
+          "rule_id": "inline_medium_targeted_diagnostics",
+          "priority": 70,
+          "summary": "Medium-risk case requires targeted diagnostics and follow-up.",
+          "scenario": "targeted_diagnostics",
+          "conditions": {
+            "risk_level_in": ["medium"]
+          }
+        },
+        {
+          "rule_id": "inline_low_stabilization_review",
+          "priority": 60,
+          "summary": "Low-risk case remains acceptable, but recent negative factors justify a stabilization review.",
+          "scenario": "stabilization_review",
+          "conditions": {
+            "risk_level_in": ["low"],
+            "negative_count_min": 2
+          }
+        },
+        {
+          "rule_id": "inline_low_observe",
+          "priority": 50,
+          "summary": "Low-risk case can remain under observation.",
+          "scenario": "observe",
+          "conditions": {
+            "risk_level_in": ["low"]
+          }
+        },
+        {
+          "rule_id": "inline_fallback_observe",
+          "priority": 0,
+          "summary": "Case can remain under observation until stronger evidence appears.",
+          "scenario": "observe",
+          "conditions": {}
+        }
+      ]
+    },
+    "forecast_default": {
+      "description": "Balanced DSS rules for future forecast points.",
+      "scenarios": {
+        "load_shedding": [
+          "Подготовить снижение нагрузки на ближайшее прогнозное окно.",
+          "Проверить резерв мощности и возможные каналы перераспределения.",
+          "Эскалировать кейс оператору смены до наступления пика."
+        ],
+        "capacity_reallocation": [
+          "Подготовить перераспределение нагрузки между доступными ресурсами.",
+          "Проверить ближайшие окна пикового потребления.",
+          "Пересчитать прогноз после корректировки доступной мощности."
+        ],
+        "preventive_maintenance": [
+          "Подготовить профилактическую проверку до наступления прогнозного окна.",
+          "Проверить параметры, которые стабильно ухудшают ряд.",
+          "Сохранить кейс как кандидат для анализа режима эксплуатации."
+        ],
+        "watch_peak_window": [
+          "Усилить мониторинг в ближайшее прогнозное окно.",
+          "Проверить, не повторяется ли пик по аналогичным временным слотам.",
+          "Подготовить оператора к быстрому переходу в режим диагностики."
+        ],
+        "observe": [
+          "Продолжить наблюдение без немедленного вмешательства.",
+          "Собрать дополнительные данные для drift-monitoring."
+        ]
+      },
+      "rules": [
+        {
+          "rule_id": "forecast_high_load_shedding",
+          "priority": 100,
+          "summary": "Forecasted point exceeds the acceptable envelope and requires proactive load mitigation.",
+          "scenario": "load_shedding",
+          "conditions": {
+            "risk_level_in": ["high"]
+          }
+        },
+        {
+          "rule_id": "forecast_medium_capacity_reallocation",
+          "priority": 90,
+          "summary": "Forecasted point is trending upward and should be routed to capacity reallocation.",
+          "scenario": "capacity_reallocation",
+          "conditions": {
+            "risk_level_in": ["medium"],
+            "strong_positive_count_min": 1
+          }
+        },
+        {
+          "rule_id": "forecast_medium_preventive_maintenance",
+          "priority": 80,
+          "summary": "Forecasted point stays within a manageable range, but leading factors justify preventive maintenance.",
+          "scenario": "preventive_maintenance",
+          "conditions": {
+            "risk_level_in": ["medium"],
+            "negative_count_min": 2
+          }
+        },
+        {
+          "rule_id": "forecast_medium_watch_peak_window",
+          "priority": 70,
+          "summary": "Forecasted point should remain under heightened supervision in the upcoming peak window.",
+          "scenario": "watch_peak_window",
+          "conditions": {
+            "risk_level_in": ["medium"]
+          }
+        },
+        {
+          "rule_id": "forecast_low_watch_peak_window",
+          "priority": 60,
+          "summary": "Forecast remains low-risk, but peak-window conditions justify additional observation.",
+          "scenario": "watch_peak_window",
+          "conditions": {
+            "risk_level_in": ["low"],
+            "strong_positive_count_min": 1
+          }
+        },
+        {
+          "rule_id": "forecast_low_observe",
+          "priority": 50,
+          "summary": "Forecasted point can remain under observation.",
+          "scenario": "observe",
+          "conditions": {
+            "risk_level_in": ["low"]
+          }
+        },
+        {
+          "rule_id": "forecast_fallback_observe",
+          "priority": 0,
+          "summary": "Forecasted point can remain under observation until stronger evidence appears.",
+          "scenario": "observe",
+          "conditions": {}
+        }
+      ]
+    },
+    "forecast_conservative": {
+      "description": "Conservative forecast DSS rules with earlier escalation.",
+      "scenarios": {
+        "manual_review": [
+          "Подготовить ручную проверку прогноза до наступления окна риска.",
+          "Проверить корректность данных и устойчивость прогностического паттерна.",
+          "Зафиксировать кейс как приоритетный для оператора смены."
+        ],
+        "capacity_reallocation": [
+          "Подготовить перераспределение нагрузки между доступными ресурсами.",
+          "Проверить резервные каналы до наступления окна риска.",
+          "Пересчитать прогноз после корректировки мощности."
+        ],
+        "watch_peak_window": [
+          "Усилить мониторинг в ближайшее прогнозное окно.",
+          "Сравнить окно с похожими историческими пиками.",
+          "Подготовить пороги для быстрой эскалации."
+        ],
+        "observe": [
+          "Продолжить наблюдение без немедленного вмешательства.",
+          "Собрать дополнительные данные для drift-monitoring."
+        ]
+      },
+      "rules": [
+        {
+          "rule_id": "forecast_conservative_high_manual_review",
+          "priority": 100,
+          "summary": "Forecasted point is critical and requires immediate manual review.",
+          "scenario": "manual_review",
+          "conditions": {
+            "risk_level_in": ["high"]
+          }
+        },
+        {
+          "rule_id": "forecast_conservative_medium_manual_review",
+          "priority": 90,
+          "summary": "Medium-risk forecast is escalated because strong positive factors suggest rapid deterioration.",
+          "scenario": "manual_review",
+          "conditions": {
+            "risk_level_in": ["medium"],
+            "strong_positive_count_min": 1
+          }
+        },
+        {
+          "rule_id": "forecast_conservative_medium_capacity_reallocation",
+          "priority": 80,
+          "summary": "Forecast should be managed through early capacity reallocation.",
+          "scenario": "capacity_reallocation",
+          "conditions": {
+            "risk_level_in": ["medium"]
+          }
+        },
+        {
+          "rule_id": "forecast_conservative_low_watch_peak_window",
+          "priority": 70,
+          "summary": "Low-risk forecast still requires peak-window supervision in conservative mode.",
+          "scenario": "watch_peak_window",
+          "conditions": {
+            "risk_level_in": ["low"],
+            "strong_positive_count_min": 1
+          }
+        },
+        {
+          "rule_id": "forecast_conservative_observe",
+          "priority": 0,
+          "summary": "Forecast can remain under observation in conservative mode.",
+          "scenario": "observe",
+          "conditions": {}
+        }
+      ]
+    }
+  }
+}

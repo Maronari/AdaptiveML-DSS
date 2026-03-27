@@ -112,9 +112,49 @@
     padding: 10px 16px;
 }
 
+.models-page .model-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(68px, 1fr));
+    gap: 8px;
+    min-width: 320px;
+}
+
+.models-page .metric-chip {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    background: #F8F9FA;
+}
+
+.models-page .metric-chip-primary {
+    border-color: rgba(63, 124, 255, 0.28);
+    background: rgba(63, 124, 255, 0.08);
+}
+
+.models-page .metric-chip-label {
+    color: #6B7280;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.models-page .metric-chip strong {
+    color: #2C3E50;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
 @media (max-width: 1100px) {
     .models-page .models-summary-grid {
         grid-template-columns: 1fr;
+    }
+
+    .models-page .model-metrics-grid {
+        grid-template-columns: repeat(3, minmax(68px, 1fr));
+        min-width: 260px;
     }
 }
 
@@ -122,5 +162,10 @@
     .models-page .models-board,
     .models-page .models-panel {
         padding: 24px;
+    }
+
+    .models-page .model-metrics-grid {
+        grid-template-columns: repeat(2, minmax(68px, 1fr));
+        min-width: 200px;
     }
 }

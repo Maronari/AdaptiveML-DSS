@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Обучение модели</title>
-    <link rel="stylesheet" href="./styles.css?v=20260324-2210" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260324-2210" />
+    <link rel="stylesheet" href="./styles.css?v=20260327-0815" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260327-0815" />
   </head>
   <body class="training-page">
     <main class="page-shell training-shell">
@@ -20,6 +20,7 @@
           <a href="./training.html" class="button button-primary" data-nav-training>Обучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
         </div>
       </header>
 
@@ -35,6 +36,7 @@
               <button type="button" id="validate-button" class="button button-secondary">Проверить</button>
               <button type="button" id="train-button" class="button button-primary">Обучить</button>
               <button type="button" id="retrain-button" class="button button-secondary">Переобучить</button>
+              <button type="button" id="monitor-button" class="button button-secondary">Мониторинг</button>
             </div>
           </div>
 
@@ -162,6 +164,13 @@
               Пресет, алгоритмы, CV и таймаут применяются только к LightAutoML.
             </div>
             <div class="training-status-stack">
+              <div class="training-job-meta">
+                <span class="training-job-label">Статус задачи</span>
+                <div class="training-job-badges">
+                  <span id="job-status-pill" class="job-status-pill job-status-idle">idle</span>
+                  <span id="job-status-note" class="training-job-note">Очередь пуста.</span>
+                </div>
+              </div>
               <div id="status-banner" class="status-banner status-idle">Готово.</div>
               <div id="training-log" class="training-log" aria-live="polite"></div>
             </div>
@@ -170,6 +179,6 @@
       </section>
     </main>
 
-    <script type="module" src="./training.js?v=20260324-2210"></script>
+    <script type="module" src="./training.js?v=20260327-0815"></script>
   </body>
 </html>

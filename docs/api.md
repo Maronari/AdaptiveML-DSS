@@ -23,6 +23,7 @@
 
 - `POST /training/run`
 - `POST /training/run/file`
+- `POST /training/run/dataset`
 
 ### Предсказание
 
@@ -47,6 +48,17 @@
 ### Поддержка решений
 
 - `POST /decision/run`
+- `POST /decision/forecast`
+- `GET /dss/rulesets`
+- `PUT /dss/rulesets`
+
+### Фоновые задачи
+
+- `POST /jobs/training/dataset`
+- `POST /jobs/retraining/dataset`
+- `POST /jobs/monitoring/project`
+- `GET /jobs`
+- `GET /jobs/{job_id}`
 
 ## Форматы входа
 
@@ -100,6 +112,25 @@
 - `file`
 - `project_id`
 - `target`
+
+### Фоновое обучение и переобучение
+
+Основной UI теперь использует job endpoints, а не синхронные training calls.
+
+Схема:
+
+1. frontend ставит job через `POST /jobs/training/dataset` или `POST /jobs/retraining/dataset`;
+2. API создаёт запись со статусом `queued`;
+3. отдельный worker (`training-worker` или `retraining-worker`) переводит job в `running`;
+4. после завершения job получает финальный статус `done` или `failed`;
+5. frontend опрашивает `GET /jobs/{job_id}` и показывает логи/статус.
+
+Поддерживаемые статусы:
+
+- `queued`
+- `running`
+- `failed`
+- `done`
 
 ## Поток предсказания
 
@@ -174,6 +205,52 @@
 3. facts;
 4. rule engine;
 5. recommendation.
+
+## Поток СППР по прогнозу
+
+`POST /decision/forecast`
+
+Логика:
+
+1. выбирается `model_version` или champion-модель проекта;
+2. строится forecast из forecasting bundle;
+3. future points при необходимости downsampling-ятся тем же способом, что и на `graph.html`;
+4. по каждой future point собираются DSS-факты;
+5. rule engine возвращает рекомендацию.
+
+Этот endpoint нужен для UI-страницы СППР, чтобы рекомендации считались по тем же точкам прогноза, что и на странице графика.
+
+## Редактирование DSS rules через API
+
+`GET /dss/rulesets`
+
+Возвращает активную JSON-конфигурацию rule engine, включая:
+
+- `default_rule_set`
+- `rule_sets`
+- `scenarios`
+- `rules`
+
+`PUT /dss/rulesets`
+
+Сохраняет override-конфиг в registry. После сохранения rule engine использует новые правила без правки Python-кода.
+
+## Мониторинг и observability
+
+`POST /jobs/monitoring/project`
+
+Создаёт monitoring job для проекта. Реальный worker:
+
+1. загружает reference dataset champion-модели и latest dataset проекта;
+2. строит Evidently drift report;
+3. сохраняет `html/json` отчёты в storage;
+4. логирует monitoring run, метрики и артефакты в MLflow.
+
+Training и retraining jobs также логируют:
+
+- MLflow params;
+- training/retraining metrics;
+- summary JSON payload в artifacts.
 
 ## Проверка здоровья
 

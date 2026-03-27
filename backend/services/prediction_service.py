@@ -368,5 +368,7 @@ class PredictionService:
                 "base_frequency_minutes": forecasting.get("base_frequency_minutes"),
                 "recent_history_rows": len(forecasting.get("recent_history", [])),
                 "forecast_model": forecasting.get("forecasting_model"),
+                "metrics": forecasting.get("metrics") or {},
+                "historical_fit_rows": len(forecasting.get("historical_fit", [])),
             },
         }

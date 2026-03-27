@@ -66,3 +66,11 @@ class ForecastRequest(BaseModel):
 
 class DecisionRequest(PredictionRequest):
     pass
+
+
+class DecisionForecastRequest(BaseModel):
+    project_id: str = Field(default="default")
+    version_id: str | None = None
+    horizon_minutes: int = Field(default=30, ge=1)
+    steps: int = Field(default=1, ge=1)
+    point_count: int | None = Field(default=None, ge=1)

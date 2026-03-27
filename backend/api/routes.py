@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from backend.schemas.api import (
     DatasetValidationRequest,
+    DecisionForecastRequest,
     DecisionRequest,
     ForecastRequest,
     ProjectCreateRequest,
@@ -14,8 +15,10 @@ from backend.schemas.api import (
     TrainRequest,
 )
 from backend.services.dataset_service import DatasetService
+from backend.services.dss_config_service import DssConfigService
 from backend.services.decision_service import DecisionService
 from backend.services.explanation_service import ExplanationService
+from backend.services.job_service import JobService
 from backend.services.prediction_service import PredictionService
 from backend.services.registry_service import RegistryService
 from backend.services.retraining_service import RetrainingService
@@ -31,6 +34,8 @@ explanation_service = ExplanationService()
 decision_service = DecisionService()
 retraining_service = RetrainingService()
 registry_service = RegistryService()
+job_service = JobService()
+dss_config_service = DssConfigService()
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -133,6 +138,21 @@ async def inspect_dataset_file(
         raise _bad_request(exc) from exc
 
 
+@router.post("/datasets/inspect/files", tags=["datasets"])
+async def inspect_dataset_files(
+    files: list[UploadFile] = File(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Inspect several uploaded files before the user selects the target."""
+    try:
+        return await dataset_service.inspect_uploaded_datasets(
+            project_id=project_id,
+            uploads=files,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/datasets/register/file", tags=["datasets"], status_code=status.HTTP_201_CREATED)
 async def register_dataset_file(
     file: UploadFile = File(...),
@@ -145,6 +165,23 @@ async def register_dataset_file(
             project_id=project_id,
             target=target,
             upload=file,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/datasets/register/files", tags=["datasets"], status_code=status.HTTP_201_CREATED)
+async def register_dataset_files(
+    files: list[UploadFile] = File(...),
+    target: str = Form(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Persist a dataset version assembled from several uploaded files."""
+    try:
+        return await dataset_service.register_uploaded_datasets(
+            project_id=project_id,
+            target=target,
+            uploads=files,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -277,6 +314,41 @@ def run_training_dataset(
         raise _bad_request(exc) from exc
 
 
+@router.post("/jobs/training/dataset", tags=["jobs"])
+def enqueue_training_dataset_job(
+    dataset_version_id: str = Form(...),
+    project_id: str = Form("default"),
+    task_type: str = Form("auto"),
+    backend: str = Form("auto"),
+    preset: str = Form("tabular"),
+    algos: str = Form("lgb,linear_l2"),
+    timeout_seconds: int = Form(30),
+    cpu_limit: int = Form(1),
+    test_size: float = Form(0.2),
+    cv_folds: int = Form(0),
+    enable_forecast: bool = Form(True),
+) -> dict[str, Any]:
+    """Queue a background training job for one stored dataset version."""
+    try:
+        return job_service.enqueue_training_dataset(
+            project_id=project_id,
+            dataset_version_id=dataset_version_id,
+            training_options={
+                "task_type": task_type,
+                "backend": backend,
+                "preset": preset,
+                "algos": algos,
+                "timeout_seconds": timeout_seconds,
+                "cpu_limit": cpu_limit,
+                "test_size": test_size,
+                "cv_folds": cv_folds,
+                "enable_forecast": enable_forecast,
+            },
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/retraining/run", tags=["training"])
 def run_retraining(payload: RetrainRequest) -> dict[str, Any]:
     """Retrain a challenger model from inline labeled records."""
@@ -381,6 +453,82 @@ def run_retraining_dataset(
                 "auto_activate": auto_activate,
             },
         )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/jobs/retraining/dataset", tags=["jobs"])
+def enqueue_retraining_dataset_job(
+    dataset_version_id: str = Form(...),
+    project_id: str = Form("default"),
+    task_type: str = Form("auto"),
+    backend: str = Form("auto"),
+    preset: str = Form("tabular"),
+    algos: str = Form("lgb,linear_l2"),
+    timeout_seconds: int = Form(30),
+    cpu_limit: int = Form(1),
+    test_size: float = Form(0.2),
+    cv_folds: int = Form(0),
+    enable_forecast: bool = Form(True),
+    history_scope: str = Form("all_history"),
+    minimum_relative_improvement: float = Form(0.03),
+    evaluation_fraction: float = Form(0.2),
+    auto_activate: bool = Form(True),
+) -> dict[str, Any]:
+    """Queue a background retraining job for one stored dataset version."""
+    try:
+        return job_service.enqueue_retraining_dataset(
+            project_id=project_id,
+            dataset_version_id=dataset_version_id,
+            training_options={
+                "task_type": task_type,
+                "backend": backend,
+                "preset": preset,
+                "algos": algos,
+                "timeout_seconds": timeout_seconds,
+                "cpu_limit": cpu_limit,
+                "test_size": test_size,
+                "cv_folds": cv_folds,
+                "enable_forecast": enable_forecast,
+            },
+            retraining_options={
+                "history_scope": history_scope,
+                "minimum_relative_improvement": minimum_relative_improvement,
+                "evaluation_fraction": evaluation_fraction,
+                "auto_activate": auto_activate,
+            },
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/jobs/monitoring/project", tags=["jobs"])
+def enqueue_monitoring_project_job(project_id: str = Form("default")) -> dict[str, Any]:
+    """Queue a background monitoring job for the selected project."""
+    try:
+        return job_service.enqueue_monitoring_project(project_id=project_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/jobs", tags=["jobs"])
+def list_jobs(
+    project_id: str | None = None,
+    job_type: str | None = None,
+    limit: int | None = 20,
+) -> dict[str, Any]:
+    """List recent background jobs, optionally filtered by project or type."""
+    try:
+        return job_service.list_jobs(project_id=project_id, job_type=job_type, limit=limit)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/jobs/{job_id}", tags=["jobs"])
+def get_job(job_id: str) -> dict[str, Any]:
+    """Return one background job with logs and result payload."""
+    try:
+        return job_service.get_job(job_id)
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
@@ -536,5 +684,45 @@ def run_decision(payload: DecisionRequest) -> dict[str, Any]:
             project_id=payload.project_id,
             records=payload.records,
         )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/decision/forecast", tags=["decision"])
+def run_forecast_decision(payload: DecisionForecastRequest) -> dict[str, Any]:
+    """Run DSS recommendations on future forecast points."""
+    try:
+        if payload.version_id:
+            return decision_service.evaluate_forecast_model_version(
+                version_id=payload.version_id,
+                horizon_minutes=payload.horizon_minutes,
+                steps=payload.steps,
+                point_count=payload.point_count,
+            )
+
+        return decision_service.evaluate_forecast(
+            project_id=payload.project_id,
+            horizon_minutes=payload.horizon_minutes,
+            steps=payload.steps,
+            point_count=payload.point_count,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/dss/rulesets", tags=["decision"])
+def get_dss_rule_sets() -> dict[str, Any]:
+    """Return the current DSS rule-engine configuration."""
+    try:
+        return dss_config_service.get_rule_engine_config()
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.put("/dss/rulesets", tags=["decision"])
+def save_dss_rule_sets(payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist the DSS rule-engine configuration override."""
+    try:
+        return dss_config_service.save_rule_engine_config(payload)
     except ValueError as exc:
         raise _bad_request(exc) from exc

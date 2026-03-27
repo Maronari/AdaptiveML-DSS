@@ -57,3 +57,26 @@ class ModelVersion:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataclass into a plain dictionary."""
         return asdict(self)
+
+
+@dataclass(slots=True)
+class BackgroundJob:
+    """Metadata describing one asynchronous background job."""
+
+    job_id: str
+    job_type: str
+    project_id: str
+    status: str
+    payload: dict[str, Any]
+    created_at: str
+    updated_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    worker_name: str | None = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    logs: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the dataclass into a plain dictionary."""
+        return asdict(self)

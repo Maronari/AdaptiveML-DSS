@@ -41,6 +41,14 @@ const elements = {
   chartTitle: document.getElementById("chart-title"),
   chartRangeNote: document.getElementById("chart-range-note"),
   chartResetButton: document.getElementById("chart-reset-button"),
+  selectedModelSummary: document.getElementById("selected-model-summary"),
+  selectedModelVersion: document.getElementById("selected-model-version"),
+  selectedModelStatus: document.getElementById("selected-model-status"),
+  selectedModelTarget: document.getElementById("selected-model-target"),
+  selectedModelMetric: document.getElementById("selected-model-metric"),
+  graphMetricsSummary: document.getElementById("graph-metrics-summary"),
+  graphModelMetricsGrid: document.getElementById("graph-model-metrics-grid"),
+  graphForecastMetricsGrid: document.getElementById("graph-forecast-metrics-grid"),
   forecastPanelTitle: document.getElementById("forecast-panel-title"),
   forecastPanelNote: document.getElementById("forecast-panel-note"),
   predictionTableBody: document.getElementById("prediction-table-body"),
@@ -57,7 +65,18 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
+  dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
+
+const QUALITY_METRICS = [
+  { key: "r", label: "R" },
+  { key: "r2", label: "R²" },
+  { key: "mse", label: "MSE" },
+  { key: "rmse", label: "RMSE" },
+  { key: "aic", label: "AIC" },
+  { key: "aicc", label: "AICc" },
+  { key: "bic", label: "BIC" },
+];
 
 function getRequestedContext() {
   const searchParams = new URLSearchParams(window.location.search);
@@ -110,6 +129,7 @@ function getChartTheme() {
     text: getThemeValue("--chart-text", "#243754"),
     actual: getThemeValue("--chart-actual", "#324661"),
     predicted: getThemeValue("--chart-predicted", "#3f7cff"),
+    model: getThemeValue("--chart-model", "#da8b2b"),
     divider: getThemeValue("--line-strong", "rgba(50, 70, 97, 0.28)"),
   };
 }
@@ -128,6 +148,16 @@ function formatNumber(value, maximumFractionDigits = 3) {
     minimumFractionDigits: 0,
     maximumFractionDigits,
   });
+}
+
+function formatPrimaryMetric(model) {
+  const metricKey = String(model?.primary_metric || "").trim();
+  const metricValue = model?.metrics?.[metricKey];
+  if (!metricKey) {
+    return "—";
+  }
+
+  return `${metricKey.toUpperCase()}: ${formatNumber(metricValue, 4)}`;
 }
 
 function formatTimestamp(value) {
@@ -197,6 +227,61 @@ function formatDuration(totalMinutes) {
     return `${minutes} мин ${seconds} сек`;
   }
   return `${seconds} сек`;
+}
+
+function updateSelectedModelSummary() {
+  if (!state.model) {
+    elements.selectedModelSummary.hidden = true;
+    elements.selectedModelVersion.textContent = "—";
+    elements.selectedModelStatus.textContent = "—";
+    elements.selectedModelTarget.textContent = "—";
+    elements.selectedModelMetric.textContent = "—";
+    return;
+  }
+
+  elements.selectedModelVersion.textContent = state.model.version_id || "—";
+  elements.selectedModelStatus.textContent = state.model.status || "—";
+  elements.selectedModelTarget.textContent = state.model.target || "—";
+  elements.selectedModelMetric.textContent = formatPrimaryMetric(state.model);
+  elements.selectedModelSummary.hidden = false;
+}
+
+function renderMetricGrid(container, metrics) {
+  container.replaceChildren();
+
+  const safeMetrics = metrics && typeof metrics === "object" ? metrics : {};
+  const fragment = document.createDocumentFragment();
+  QUALITY_METRICS.forEach(({ key, label }) => {
+    const card = document.createElement("div");
+    card.className = "graph-metric-chip";
+
+    const metricLabel = document.createElement("span");
+    metricLabel.className = "graph-metric-chip-label";
+    metricLabel.textContent = label;
+    card.append(metricLabel);
+
+    const metricValue = document.createElement("strong");
+    metricValue.textContent = formatNumber(safeMetrics[key], 4);
+    card.append(metricValue);
+
+    fragment.append(card);
+  });
+
+  container.append(fragment);
+}
+
+function updateMetricsSummary() {
+  if (!state.model) {
+    elements.graphMetricsSummary.hidden = true;
+    elements.graphModelMetricsGrid.replaceChildren();
+    elements.graphForecastMetricsGrid.replaceChildren();
+    return;
+  }
+
+  const forecastMetrics = state.model.forecasting?.metrics || state.model.training_artifacts?.forecasting?.metrics || {};
+  renderMetricGrid(elements.graphModelMetricsGrid, state.model.metrics || {});
+  renderMetricGrid(elements.graphForecastMetricsGrid, forecastMetrics);
+  elements.graphMetricsSummary.hidden = false;
 }
 
 function getInitialIntervalMinutes(context, model) {
@@ -400,9 +485,24 @@ function syncNavigation(projectId) {
     }
     link.href = targetUrl.toString();
   }
+
+  for (const link of elements.dssLinks) {
+    const targetUrl = new URL("./dss.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    if (state.model?.version_id) {
+      targetUrl.searchParams.set("model_version", state.model.version_id);
+    }
+    if (state.request) {
+      targetUrl.searchParams.set("interval_minutes", String(state.request.intervalMinutes));
+      targetUrl.searchParams.set("point_count", String(state.request.pointCount));
+    }
+    link.href = targetUrl.toString();
+  }
 }
 
-function resetViewport(totalPoints = getActiveItems().length) {
+function resetViewport(totalPoints = getTimelineRows().length) {
   const viewport = getDefaultViewportRange(totalPoints);
   chartState.viewStart = viewport.start;
   chartState.viewEnd = viewport.end;
@@ -415,7 +515,7 @@ function resetViewport(totalPoints = getActiveItems().length) {
 }
 
 function isViewportReset() {
-  const viewport = getDefaultViewportRange(getActiveItems().length);
+  const viewport = getDefaultViewportRange(getTimelineRows().length);
   return (
     Math.abs(chartState.viewStart - viewport.start) <= 0.0001 &&
     Math.abs(chartState.viewEnd - viewport.end) <= 0.0001
@@ -440,8 +540,16 @@ function showTooltip(pointLayout) {
     return;
   }
 
+  const seriesLabels = {
+    history: "История",
+    model: "Модель",
+    forecast: "Прогноз",
+  };
   const tooltip = elements.chartTooltip;
-  tooltip.innerHTML = `<strong>${formatNumber(pointLayout.value)}</strong><span>${formatTimestamp(pointLayout.timestamp)}</span>`;
+  tooltip.innerHTML = `
+    <strong>${formatNumber(pointLayout.value)}</strong>
+    <span>${seriesLabels[pointLayout.series] || "Точка"} • ${formatTimestamp(pointLayout.timestamp)}</span>
+  `;
   tooltip.hidden = false;
 
   const frame = elements.chartCanvas.parentElement;
@@ -472,6 +580,38 @@ function toTimestampMs(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function normalizeTimestamp(value) {
+  const timestamp = toTimestampMs(value);
+  return timestamp === null ? null : new Date(timestamp).toISOString();
+}
+
+function extractRecordTimestamp(record) {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+
+  const directKeys = ["timestamp", "datetime", "date", "Дата", "Дата и время"];
+  for (const key of directKeys) {
+    if (key in record) {
+      const timestamp = normalizeTimestamp(record[key]);
+      if (timestamp) {
+        return timestamp;
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key.endsWith("__ts")) {
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return normalizeTimestamp(numericValue * 1000);
+      }
+    }
+  }
+
+  return null;
+}
+
 function buildDisplayForecast(rawForecast, request) {
   const rawForecastRows = Array.isArray(rawForecast?.forecast) ? rawForecast.forecast : [];
   if (!request || !rawForecastRows.length) {
@@ -500,6 +640,92 @@ function buildDisplayForecast(rawForecast, request) {
   return Array.from(selectedIndexes)
     .sort((left, right) => left - right)
     .map((index) => sanitizedRows[index]);
+}
+
+function getDisplayForecastRows() {
+  if (Array.isArray(state.displayForecast) && state.displayForecast.length) {
+    return state.displayForecast;
+  }
+  return Array.isArray(state.forecast?.forecast) ? state.forecast.forecast : [];
+}
+
+function getModelHistoryRows() {
+  const historicalFitRows = Array.isArray(state.forecast?.historical_fit) ? state.forecast.historical_fit : [];
+  if (historicalFitRows.length) {
+    return historicalFitRows
+      .map((item) => ({
+        timestamp: item.timestamp,
+        value: Number(item.prediction),
+      }))
+      .filter((item) => item.timestamp && Number.isFinite(item.value))
+      .sort((left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp));
+  }
+
+  const rows = Array.isArray(state.model?.holdout_predictions) ? state.model.holdout_predictions : [];
+  return rows
+    .map((item) => ({
+      timestamp: extractRecordTimestamp(item.record),
+      value: Number(item.prediction),
+    }))
+    .filter((item) => item.timestamp && Number.isFinite(item.value))
+    .sort((left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp));
+}
+
+function getTimelineRows() {
+  const rowsByTimestamp = new Map();
+
+  const ensureRow = (timestamp) => {
+    if (!timestamp) {
+      return null;
+    }
+
+    const normalizedTimestamp = normalizeTimestamp(timestamp);
+    if (!normalizedTimestamp) {
+      return null;
+    }
+
+    let row = rowsByTimestamp.get(normalizedTimestamp);
+    if (!row) {
+      row = {
+        timestamp: normalizedTimestamp,
+        actual: null,
+        model: null,
+        forecast: null,
+      };
+      rowsByTimestamp.set(normalizedTimestamp, row);
+    }
+    return row;
+  };
+
+  const historyRows = Array.isArray(state.forecast?.recent_history) ? state.forecast.recent_history : [];
+  const historicalFitRows = Array.isArray(state.forecast?.historical_fit) ? state.forecast.historical_fit : [];
+  const sourceHistoryRows = historicalFitRows.length ? historicalFitRows : historyRows;
+  sourceHistoryRows.forEach((item) => {
+    const row = ensureRow(item.timestamp);
+    const value = Number("target" in item ? item.target : item.actual);
+    if (row && Number.isFinite(value)) {
+      row.actual = value;
+    }
+  });
+
+  getModelHistoryRows().forEach((item) => {
+    const row = ensureRow(item.timestamp);
+    if (row) {
+      row.model = item.value;
+    }
+  });
+
+  getDisplayForecastRows().forEach((item) => {
+    const row = ensureRow(item.timestamp);
+    const value = Number(item.prediction);
+    if (row && Number.isFinite(value)) {
+      row.forecast = value;
+    }
+  });
+
+  return Array.from(rowsByTimestamp.values()).sort(
+    (left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp),
+  );
 }
 
 function applyDisplayPointCount(pointCount, { resetZoom = false } = {}) {
@@ -703,39 +929,15 @@ function buildXAxisTicks(items, maxTickCount = 6) {
     }));
 }
 
-function getActiveItems() {
-  const history = Array.isArray(state.forecast?.recent_history)
-    ? state.forecast.recent_history
-        .map((item) => ({
-          timestamp: item.timestamp,
-          value: Number(item.target),
-          series: "history",
-        }))
-        .filter((item) => Number.isFinite(item.value))
-    : [];
-
-  const forecast = Array.isArray(state.forecast?.forecast)
-    ? (Array.isArray(state.displayForecast) ? state.displayForecast : state.forecast.forecast)
-        .map((item) => ({
-          timestamp: item.timestamp,
-          value: Number(item.prediction),
-          series: "forecast",
-        }))
-        .filter((item) => Number.isFinite(item.value))
-    : [];
-
-  return [...history, ...forecast];
-}
-
-function getVisibleSlice(items) {
-  const total = items.length;
+function getVisibleSlice(rows) {
+  const total = rows.length;
   if (!total) {
     return {
       total: 0,
       startIndex: 0,
       endIndex: 0,
       zoomLevel: 1,
-      items: [],
+      rows: [],
     };
   }
 
@@ -754,7 +956,7 @@ function getVisibleSlice(items) {
     startIndex,
     endIndex,
     zoomLevel: Number((1 / currentWindow).toFixed(2)),
-    items: items.slice(startIndex, endIndex + 1),
+    rows: rows.slice(startIndex, endIndex + 1),
   };
 }
 
@@ -777,8 +979,8 @@ function renderEmptyState(message, title = "Прогноз модели") {
 }
 
 function drawForecastChart() {
-  const allPoints = getActiveItems();
-  if (!allPoints.length) {
+  const timelineRows = getTimelineRows();
+  if (!timelineRows.length) {
     renderEmptyState("Нет данных для построения графика.", "Прогноз модели");
     return;
   }
@@ -786,8 +988,8 @@ function drawForecastChart() {
   const { context, width, height } = prepareCanvas(elements.chartCanvas, DEFAULT_CHART_HEIGHT);
   const theme = getChartTheme();
   const bounds = getPlotBounds(width, height);
-  const visibleSlice = getVisibleSlice(allPoints);
-  const values = visibleSlice.items.map((item) => item.value);
+  const visibleSlice = getVisibleSlice(timelineRows);
+  const values = visibleSlice.rows.flatMap((item) => [item.actual, item.model, item.forecast].filter(Number.isFinite));
 
   context.clearRect(0, 0, width, height);
   context.fillStyle = theme.background;
@@ -810,6 +1012,7 @@ function drawForecastChart() {
     context,
     [
       { label: "История", color: theme.actual },
+      { label: "Модель", color: theme.model },
       { label: "Прогноз", color: theme.predicted },
     ],
     theme,
@@ -830,9 +1033,9 @@ function drawForecastChart() {
     context.fillText(formatNumber(value), 10, y + 4);
   }
 
-  const xTicks = buildXAxisTicks(visibleSlice.items, width < 900 ? 4 : 6);
+  const xTicks = buildXAxisTicks(visibleSlice.rows, width < 900 ? 4 : 6);
   xTicks.forEach(({ index, item }) => {
-    const x = bounds.left + (plotWidth * index) / Math.max(visibleSlice.items.length - 1, 1);
+    const x = bounds.left + (plotWidth * index) / Math.max(visibleSlice.rows.length - 1, 1);
 
     context.strokeStyle = theme.grid;
     context.beginPath();
@@ -859,19 +1062,58 @@ function drawForecastChart() {
   });
 
   const getPointX = (index) =>
-    bounds.left + (plotWidth * index) / Math.max(visibleSlice.items.length - 1, 1);
+    bounds.left + (plotWidth * index) / Math.max(visibleSlice.rows.length - 1, 1);
   const getPointY = (value) =>
     bounds.bottom - ((value - paddedMin) / (paddedMax - paddedMin || 1)) * plotHeight;
 
-  const pointLayouts = visibleSlice.items.map((item, index) => ({
-    ...item,
-    x: getPointX(index),
-    y: getPointY(item.value),
-    pointId: getPointId(item),
-  }));
-  const historyPoints = pointLayouts.filter((item) => item.series === "history");
-  const forecastPoints = pointLayouts.filter((item) => item.series === "forecast");
-  const lastHistoryIndex = pointLayouts.map((item) => item.series).lastIndexOf("history");
+  const pointLayouts = [];
+  const historyPoints = [];
+  const modelPoints = [];
+  const forecastPoints = [];
+  let lastHistoryIndex = -1;
+
+  visibleSlice.rows.forEach((item, index) => {
+    const x = getPointX(index);
+    if (Number.isFinite(item.actual)) {
+      const point = {
+        timestamp: item.timestamp,
+        value: item.actual,
+        series: "history",
+        x,
+        y: getPointY(item.actual),
+      };
+      point.pointId = getPointId(point);
+      historyPoints.push(point);
+      pointLayouts.push(point);
+      lastHistoryIndex = index;
+    }
+
+    if (Number.isFinite(item.model)) {
+      const point = {
+        timestamp: item.timestamp,
+        value: item.model,
+        series: "model",
+        x,
+        y: getPointY(item.model),
+      };
+      point.pointId = getPointId(point);
+      modelPoints.push(point);
+      pointLayouts.push(point);
+    }
+
+    if (Number.isFinite(item.forecast)) {
+      const point = {
+        timestamp: item.timestamp,
+        value: item.forecast,
+        series: "forecast",
+        x,
+        y: getPointY(item.forecast),
+      };
+      point.pointId = getPointId(point);
+      forecastPoints.push(point);
+      pointLayouts.push(point);
+    }
+  });
 
   if (lastHistoryIndex >= 0) {
     const dividerX = getPointX(lastHistoryIndex);
@@ -908,9 +1150,13 @@ function drawForecastChart() {
   };
 
   drawSeries(historyPoints, theme.actual);
-
+  drawSeries(modelPoints, theme.model);
   const bridgePoint =
-    historyPoints.length && forecastPoints.length ? historyPoints[historyPoints.length - 1] : null;
+    historyPoints.length && forecastPoints.length
+      ? historyPoints[historyPoints.length - 1]
+      : modelPoints.length && forecastPoints.length
+        ? modelPoints[modelPoints.length - 1]
+        : null;
   drawSeries(forecastPoints, theme.predicted, true, bridgePoint);
 
   chartState.renderedPoints = pointLayouts;
@@ -922,7 +1168,8 @@ function drawForecastChart() {
   pointLayouts.forEach((point) => {
     const isHovered = hoveredPoint?.pointId === point.pointId;
     const radius = isHovered ? 5 : point.series === "forecast" ? 3 : 2.75;
-    context.fillStyle = point.series === "forecast" ? theme.predicted : theme.actual;
+    context.fillStyle =
+      point.series === "forecast" ? theme.predicted : point.series === "model" ? theme.model : theme.actual;
     context.beginPath();
     context.arc(point.x, point.y, radius, 0, Math.PI * 2);
     context.fill();
@@ -937,17 +1184,24 @@ function drawForecastChart() {
   const zoomText = `Масштаб: ${visibleSlice.zoomLevel}x`;
   context.fillText(zoomText, bounds.right - context.measureText(zoomText).width, bounds.top - 16);
 
-  const zoomEnabled = allPoints.length > MIN_VISIBLE_POINTS;
+  const zoomEnabled = timelineRows.length > MIN_VISIBLE_POINTS;
   const baseText = `Проект ${state.model.project_id}, версия ${state.model.version_id}, цель ${state.model.target}.`;
   const rangeText =
     ` Интервал ${formatDuration(state.request.totalMinutes)}, точек ${state.request.pointCount}, ` +
     `шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг ${formatDuration(state.request.baseFrequencyMinutes)}.`;
+  const modelText = modelPoints.length
+    ? ``
+    : ` Исторические точки модели недоступны для этой версии, поэтому на графике показан прогнозный хвост.`;
   const interactionText = zoomEnabled
     ? " Колесо мыши масштабирует график, перетаскивание двигает окно влево и вправо, наведение показывает значение точки."
     : " Наведите на точку, чтобы увидеть значение.";
 
   elements.chartTitle.textContent = `Прогноз модели ${state.model.version_id}`;
-  updateChartControls(`${baseText}${rangeText}${interactionText}`, zoomEnabled && !isViewportReset(), zoomEnabled);
+  updateChartControls(
+    `${baseText}${rangeText}${modelText}${interactionText}`,
+    zoomEnabled && !isViewportReset(),
+    zoomEnabled,
+  );
 
   if (hoveredPoint) {
     showTooltip(hoveredPoint);
@@ -985,6 +1239,8 @@ function renderChart() {
 }
 
 function renderAll() {
+  updateSelectedModelSummary();
+  updateMetricsSummary();
   setInteractiveState();
   updateSidebarInfo();
   renderPredictionTable();
@@ -1002,7 +1258,7 @@ function getCanvasMetrics() {
 }
 
 function canZoomChart() {
-  return getActiveItems().length > MIN_VISIBLE_POINTS;
+  return getTimelineRows().length > MIN_VISIBLE_POINTS;
 }
 
 function isInsidePlot(clientX, clientY) {
@@ -1063,7 +1319,7 @@ function handleChartWheel(event) {
   }
 
   event.preventDefault();
-  const total = getActiveItems().length;
+  const total = getTimelineRows().length;
   const minWindow = Math.min(1, MIN_VISIBLE_POINTS / total);
   const currentWindow = clamp(chartState.viewEnd - chartState.viewStart, minWindow, 1);
   const zoomFactor = event.deltaY < 0 ? 0.86 : 1.16;

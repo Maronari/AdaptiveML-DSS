@@ -1,16 +1,7 @@
-DEFAULT_SCENARIOS = {
-    "manual_review": [
-        "Снизить нагрузку на систему или объект наблюдения.",
-        "Провести ручную проверку кейса.",
-        "Назначить внеплановую диагностику по ведущим факторам.",
-    ],
-    "targeted_diagnostics": [
-        "Проверить факторы со средним и высоким вкладом.",
-        "Пересчитать прогноз после корректирующих действий.",
-        "Подготовить кейс к возможному retraining после верификации.",
-    ],
-    "observe": [
-        "Продолжить наблюдение без немедленного вмешательства.",
-        "Собрать дополнительные данные для drift-monitoring.",
-    ],
-}
+from __future__ import annotations
+
+from dss.rules.loader import get_rule_set_config
+
+
+_rule_set_name, _rule_set = get_rule_set_config("inline_default")
+DEFAULT_SCENARIOS = dict(_rule_set.get("scenarios") or {})

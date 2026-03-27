@@ -94,6 +94,20 @@ def build_timestamped_energy_dataset() -> list[dict[str, float | int | str]]:
     return dataset
 
 
+def build_weather_dataset() -> list[dict[str, float | int | str]]:
+    timestamps = pd.date_range("2024-01-01 00:00:00", periods=10, freq="4h")
+    dataset = []
+    for index, timestamp in enumerate(timestamps):
+        dataset.append(
+            {
+                "dateByOurs": timestamp.isoformat(),
+                "Температура наружная": round(15.0 + index * 0.7, 1),
+                "Облачность": round((index % 5) * 0.2, 2),
+            }
+        )
+    return dataset
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("ADAPTIVEML_STORAGE_ROOT", str(tmp_path / "storage"))
@@ -101,13 +115,19 @@ def client(tmp_path, monkeypatch):
         "backend.main",
         "backend.api.routes",
         "backend.services.settings",
+        "backend.services.dss_config_service",
         "backend.services.registry_service",
         "backend.services.dataset_service",
+        "backend.services.job_service",
+        "backend.services.monitoring_service",
+        "backend.services.observability_service",
         "backend.services.training_service",
         "backend.services.prediction_service",
         "backend.services.retraining_service",
         "backend.services.decision_service",
         "backend.services.explanation_service",
+        "dss.rules.loader",
+        "dss.experta_engine.engine",
     ]:
         sys.modules.pop(module_name, None)
 
@@ -441,6 +461,63 @@ def test_dataset_inspect_file_returns_temporal_and_project_context(client: TestC
     assert body["project_context"]["model_versions"] == 1
     assert body["project_context"]["latest_dataset_source_name"] == "seed.xlsx"
     assert body["project_context"]["latest_model_version_id"] is not None
+
+
+def test_dataset_inspect_and_register_multiple_files(client: TestClient):
+    energy_frame = pd.DataFrame(build_timestamped_energy_dataset())
+    weather_frame = pd.DataFrame(build_weather_dataset())
+
+    energy_payload = BytesIO()
+    energy_frame.to_excel(energy_payload, index=False)
+    energy_payload.seek(0)
+
+    weather_payload = BytesIO()
+    weather_frame.to_excel(weather_payload, index=False)
+    weather_payload.seek(0)
+
+    inspect_response = client.post(
+        "/datasets/inspect/files",
+        files=[
+            (
+                "files",
+                ("energy.xlsx", energy_payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ),
+            (
+                "files",
+                ("weather.xlsx", weather_payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ),
+        ],
+        data={"project_id": "batch-upload-demo"},
+    )
+    assert inspect_response.status_code == 200
+    inspect_body = inspect_response.json()
+    assert inspect_body["project_id"] == "batch-upload-demo"
+    assert inspect_body["rows"] == len(energy_frame)
+    assert "timestamp" in inspect_body["columns"]
+    assert "Температура наружная" in inspect_body["columns"]
+    assert "Потребление" in inspect_body["columns"]
+    assert "Потребление" in inspect_body["target_summaries"]
+
+    register_response = client.post(
+        "/datasets/register/files",
+        files=[
+            (
+                "files",
+                ("energy.xlsx", energy_payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ),
+            (
+                "files",
+                ("weather.xlsx", weather_payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ),
+        ],
+        data={"project_id": "batch-upload-demo", "target": "Потребление"},
+    )
+    assert register_response.status_code == 201
+    register_body = register_response.json()
+    assert register_body["rows"] == len(energy_frame)
+    assert register_body["target"] == "Потребление"
+    assert register_body["dataset_version"]["project_id"] == "batch-upload-demo"
+    assert register_body["source_files"] == ["energy.xlsx", "weather.xlsx"]
 
 
 def test_dataset_register_and_train_from_saved_dataset(client: TestClient):
@@ -843,6 +920,7 @@ def test_latest_model_and_forecast_endpoints(client: TestClient):
     assert latest_model["version_id"] == trained_model_version
     assert latest_model["forecasting"]["available"] is True
     assert latest_model["project_id"] == "model-api-demo"
+    assert {"r", "r2", "mse", "rmse", "aic", "bic"} <= set(latest_model["metrics"])
     assert latest_model["holdout_predictions"]
     assert latest_model["training_artifacts"]["holdout_rows"] == len(latest_model["holdout_predictions"])
     assert latest_model["training_artifacts"]["feature_importances"]
@@ -857,6 +935,8 @@ def test_latest_model_and_forecast_endpoints(client: TestClient):
     assert model_payload["holdout_predictions"][0]["actual"] is not None
     assert "prediction" in model_payload["holdout_predictions"][0]
     assert model_payload["training_artifacts"]["forecasting"]["available"] is True
+    assert model_payload["forecasting"]["metrics"]
+    assert model_payload["forecasting"]["historical_fit_rows"] > 0
 
     forecast_response = client.get(
         f"/models/{trained_model_version}/forecast",
@@ -866,6 +946,8 @@ def test_latest_model_and_forecast_endpoints(client: TestClient):
     forecast_payload = forecast_response.json()
     assert forecast_payload["model_version"] == trained_model_version
     assert forecast_payload["steps"] == 5
+    assert len(forecast_payload["historical_fit"]) > 0
+    assert set(forecast_payload["historical_fit"][0]) == {"timestamp", "target", "prediction"}
     assert len(forecast_payload["recent_history"]) > 0
     assert len(forecast_payload["forecast"]) == 5
 
@@ -884,7 +966,9 @@ def test_forecast_run_from_temporal_regression_dataset(client: TestClient):
     assert train_response.status_code == 200
     training_body = train_response.json()
     assert training_body["task_type"] == "regression"
+    assert {"r", "r2", "mse", "rmse", "aic", "bic"} <= set(training_body["metrics"])
     assert training_body["forecasting"]["available"] is True
+    assert {"r", "r2", "mse", "rmse", "aic", "bic"} <= set(training_body["forecasting"]["forecast_metrics"])
 
     forecast_response = client.post(
         "/forecast/run",
@@ -1078,3 +1162,67 @@ def test_retraining_recent_window_uses_last_30_days_history(client: TestClient):
     assert body["selection_summary"]["historical_rows_selected"] == 31
     assert body["selection_summary"]["new_rows_used_for_training"] == 24
     assert body["selection_summary"]["candidate_training_rows"] == 55
+
+
+def test_jobs_monitoring_endpoint_returns_queued_job_and_can_be_polled(client: TestClient):
+    create_response = client.post("/projects", json={"name": "Jobs Demo"})
+    assert create_response.status_code == 201
+    project_id = create_response.json()["project_id"]
+
+    enqueue_response = client.post("/jobs/monitoring/project", data={"project_id": project_id})
+    assert enqueue_response.status_code == 200
+    job = enqueue_response.json()
+    assert job["status"] == "queued"
+    assert job["job_type"] == "monitoring_project"
+    assert job["project_id"] == project_id
+
+    list_response = client.get("/jobs", params={"project_id": project_id})
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["job_id"] == job["job_id"]
+    assert items[0]["status"] == "queued"
+
+    detail_response = client.get(f"/jobs/{job['job_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["job_id"] == job["job_id"]
+    assert detail["status"] == "queued"
+    assert detail["result"] is None
+    assert detail["logs"] == []
+
+
+def test_dss_rulesets_endpoint_allows_read_and_write_config(client: TestClient):
+    read_response = client.get("/dss/rulesets")
+    assert read_response.status_code == 200
+    original_config = read_response.json()
+    assert "default_rule_set" in original_config
+    assert "rule_sets" in original_config
+
+    updated_config = {
+        **original_config,
+        "default_rule_set": "inline_default",
+        "rule_sets": {
+            **original_config["rule_sets"],
+            "inline_default": {
+                **original_config["rule_sets"]["inline_default"],
+                "scenarios": {
+                    **original_config["rule_sets"]["inline_default"]["scenarios"],
+                    "observe": [
+                        "Observe from test suite",
+                        *original_config["rule_sets"]["inline_default"]["scenarios"]["observe"][1:],
+                    ],
+                },
+            },
+        },
+    }
+
+    save_response = client.put("/dss/rulesets", json=updated_config)
+    assert save_response.status_code == 200
+    saved_config = save_response.json()
+    assert saved_config["rule_sets"]["inline_default"]["scenarios"]["observe"][0] == "Observe from test suite"
+
+    reread_response = client.get("/dss/rulesets")
+    assert reread_response.status_code == 200
+    reread_config = reread_response.json()
+    assert reread_config["rule_sets"]["inline_default"]["scenarios"]["observe"][0] == "Observe from test suite"

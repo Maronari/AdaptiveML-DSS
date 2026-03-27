@@ -29,6 +29,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
+  dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
 
 function getPageContext() {
@@ -90,9 +91,11 @@ async function fetchJson(path) {
   return payload;
 }
 
-async function postFile(path, { file, projectId, target = "" }) {
+async function postUploads(path, { files, projectId, target = "" }) {
   const formData = new FormData();
-  formData.append("file", file);
+  files.forEach((file) => {
+    formData.append(files.length > 1 ? "files" : "file", file);
+  });
   formData.append("project_id", projectId);
   if (target) {
     formData.append("target", target);
@@ -143,6 +146,14 @@ function syncNavigation(projectId) {
 
   for (const link of elements.graphLinks) {
     const targetUrl = new URL("./graph.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.dssLinks) {
+    const targetUrl = new URL("./dss.html", window.location.href);
     if (normalizedProjectId) {
       targetUrl.searchParams.set("project_id", normalizedProjectId);
     }
@@ -833,12 +844,12 @@ function renderInspection(inspection) {
   setBusy(false);
 }
 
-function requireFile() {
-  const file = elements.fileInput.files?.[0] ?? null;
-  if (!file) {
-    throw new Error("Выберите CSV или XLSX файл.");
+function requireFiles() {
+  const files = Array.from(elements.fileInput.files ?? []);
+  if (!files.length) {
+    throw new Error("Выберите хотя бы один CSV или XLSX файл.");
   }
-  return file;
+  return files;
 }
 
 function requireSelectedTarget() {
@@ -875,21 +886,24 @@ async function runAction(actionName, action, options = {}) {
 }
 
 async function handleInspect() {
-  const file = requireFile();
-  const inspection = await postFile("/datasets/inspect/file", {
-    file,
+  const files = requireFiles();
+  const inspection = await postUploads(files.length > 1 ? "/datasets/inspect/files" : "/datasets/inspect/file", {
+    files,
     projectId: state.projectId,
   });
   const hydratedInspection = await hydrateInspection(inspection);
   renderInspection(hydratedInspection);
-  setStatus("success", `Файл разобран: ${hydratedInspection.rows} строк, ${hydratedInspection.columns.length} колонок.`);
+  setStatus(
+    "success",
+    `${files.length > 1 ? "Пакет файлов" : "Файл"} разобран: ${hydratedInspection.rows} строк, ${hydratedInspection.columns.length} колонок.`,
+  );
 }
 
 async function handleContinue() {
-  const file = requireFile();
+  const files = requireFiles();
   const target = requireSelectedTarget();
-  const payload = await postFile("/datasets/register/file", {
-    file,
+  const payload = await postUploads(files.length > 1 ? "/datasets/register/files" : "/datasets/register/file", {
+    files,
     projectId: state.projectId,
     target,
   });

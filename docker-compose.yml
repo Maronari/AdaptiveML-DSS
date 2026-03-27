@@ -21,6 +21,7 @@ services:
       start_period: 10s
 
   api:
+    image: adaptiveml-dss-api:latest
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -56,6 +57,66 @@ services:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+
+  training-worker:
+    image: adaptiveml-dss-api:latest
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - api_storage:/var/lib/adaptiveml/storage
+    command: python -m workers.training_jobs.tasks
+    environment:
+      ADAPTIVEML_STORAGE_ROOT: /var/lib/adaptiveml/storage
+      ADAPTIVEML_OBJECT_STORAGE_BACKEND: minio
+      ADAPTIVEML_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      ADAPTIVEML_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_SECRET_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
+      ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
+      POSTGRES_HOST: postgres
+    depends_on:
+      api:
+        condition: service_healthy
+
+  retraining-worker:
+    image: adaptiveml-dss-api:latest
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - api_storage:/var/lib/adaptiveml/storage
+    command: python -m workers.retraining_jobs.tasks
+    environment:
+      ADAPTIVEML_STORAGE_ROOT: /var/lib/adaptiveml/storage
+      ADAPTIVEML_OBJECT_STORAGE_BACKEND: minio
+      ADAPTIVEML_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      ADAPTIVEML_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_SECRET_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
+      ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
+      POSTGRES_HOST: postgres
+    depends_on:
+      api:
+        condition: service_healthy
+
+  monitoring-worker:
+    image: adaptiveml-dss-api:latest
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - api_storage:/var/lib/adaptiveml/storage
+    command: python -m workers.monitoring_jobs.tasks
+    environment:
+      ADAPTIVEML_STORAGE_ROOT: /var/lib/adaptiveml/storage
+      ADAPTIVEML_OBJECT_STORAGE_BACKEND: minio
+      ADAPTIVEML_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      ADAPTIVEML_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_SECRET_KEY: minioadmin
+      ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
+      ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
+      POSTGRES_HOST: postgres
+    depends_on:
+      api:
         condition: service_healthy
 
   postgres:

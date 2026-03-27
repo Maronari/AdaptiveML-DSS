@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS - СППР</title>
+    <link rel="stylesheet" href="./styles.css?v=20260327-0715" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260327-0715" />
+  </head>
+  <body class="training-page dss-page">
+    <main class="page-shell dss-shell">
+      <header class="app-header">
+        <div class="app-header-copy">
+          <h1>AutoML</h1>
+          <p class="page-subtitle">Модуль СППР для рекомендаций по выбранному проекту</p>
+        </div>
+        <div class="page-actions">
+          <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./upload.html" class="button button-secondary" data-nav-upload>Данные</a>
+          <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
+          <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-primary" data-nav-dss>СППР</a>
+        </div>
+      </header>
+
+      <section class="workspace-board workspace-board-single dss-board">
+        <section class="dss-layout">
+          <aside class="panel dss-sidebar">
+            <div class="panel-heading dss-panel-heading">
+              <p class="eyebrow">Контекст</p>
+              <h2 id="dss-project-title">СППР проекта</h2>
+              <p id="dss-project-note" class="field-note">
+                Страница использует champion-модель и будущие точки прогноза по проекту.
+              </p>
+            </div>
+
+            <div class="dss-summary-grid">
+              <article class="dss-summary-card">
+                <span class="dss-summary-label">Проект</span>
+                <strong id="dss-project-id">—</strong>
+              </article>
+              <article class="dss-summary-card">
+                <span class="dss-summary-label">Датасет</span>
+                <strong id="dss-dataset-id">—</strong>
+              </article>
+              <article class="dss-summary-card">
+                <span class="dss-summary-label">Модель</span>
+                <strong id="dss-model-id">—</strong>
+              </article>
+              <article class="dss-summary-card">
+                <span class="dss-summary-label">Target</span>
+                <strong id="dss-target">—</strong>
+              </article>
+            </div>
+
+            <div class="dss-action-card">
+              <div class="dss-action-copy">
+                <strong>Старт СППР</strong>
+                <p id="dss-action-note" class="field-note">
+                  СППР будет считаться на предсказанных будущих значениях, а не на preview-строках датасета.
+                </p>
+              </div>
+              <div class="inline-grid">
+                <label class="field">
+                  <span>Интервал вперёд, мин</span>
+                  <input id="dss-horizon-input" type="number" min="10" step="10" value="120" />
+                </label>
+                <label class="field">
+                  <span>Точек прогноза</span>
+                  <input id="dss-steps-input" type="number" min="1" step="1" value="12" />
+                </label>
+              </div>
+              <div class="button-grid">
+                <button type="button" id="dss-preview-button" class="button button-secondary">Обновить прогноз</button>
+                <button type="button" id="dss-run-button" class="button button-primary">Запустить рекомендации</button>
+              </div>
+            </div>
+
+            <div class="dss-sample-shell table-shell">
+              <table>
+                <thead id="dss-sample-head"></thead>
+                <tbody id="dss-sample-body"></tbody>
+              </table>
+              <div id="dss-sample-empty" class="table-placeholder">
+                После загрузки проекта здесь появятся будущие точки прогноза для СППР.
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel dss-main-panel">
+            <div class="panel-heading dss-panel-heading">
+              <p class="eyebrow">Рекомендации</p>
+              <h2 id="dss-results-title">Результаты СППР</h2>
+              <p id="dss-results-note" class="field-note">
+                Запустите модуль, чтобы получить рекомендации, уровень риска и обоснование.
+              </p>
+            </div>
+
+            <div id="dss-status-banner" class="status-banner status-idle">Готово.</div>
+
+            <section class="dss-rules-editor">
+              <div class="dss-rules-head">
+                <div>
+                  <strong>Rule Sets</strong>
+                  <p id="dss-rules-note" class="field-note">
+                    Здесь можно править JSON-конфиг правил и сценариев без изменения Python-кода.
+                  </p>
+                </div>
+                <div class="button-grid">
+                  <button type="button" id="dss-rules-reload" class="button button-secondary">Перезагрузить rules</button>
+                  <button type="button" id="dss-rules-save" class="button button-primary">Сохранить rules</button>
+                </div>
+              </div>
+              <textarea id="dss-rules-editor" class="dss-rules-textarea" spellcheck="false"></textarea>
+            </section>
+
+            <div id="dss-results-empty" class="table-placeholder dss-results-empty">
+              Для выбранного проекта рекомендации ещё не рассчитаны.
+            </div>
+
+            <div id="dss-results-list" class="dss-results-list" hidden></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./dss.js?v=20260327-0715"></script>
+  </body>
+</html>

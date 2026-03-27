@@ -8,6 +8,16 @@ const state = {
   busyVersionId: "",
 };
 
+const QUALITY_METRICS = [
+  { key: "r", label: "R" },
+  { key: "r2", label: "R²" },
+  { key: "mse", label: "MSE" },
+  { key: "rmse", label: "RMSE" },
+  { key: "aic", label: "AIC" },
+  { key: "aicc", label: "AICc" },
+  { key: "bic", label: "BIC" },
+];
+
 const elements = {
   projectTitle: document.getElementById("models-project-title"),
   projectNote: document.getElementById("models-project-note"),
@@ -20,6 +30,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
+  dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
 
 function escapeHtml(value) {
@@ -71,6 +82,25 @@ function formatMetricValue(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 4,
   });
+}
+
+function renderQualityMetrics(metrics, primaryMetric) {
+  const safeMetrics = metrics && typeof metrics === "object" ? metrics : {};
+  const primaryMetricKey = String(primaryMetric || "").trim().toLowerCase();
+
+  return `
+    <div class="model-metrics-grid">
+      ${QUALITY_METRICS.map(({ key, label }) => {
+        const metricClass = primaryMetricKey === key ? "metric-chip metric-chip-primary" : "metric-chip";
+        return `
+          <div class="${metricClass}">
+            <span class="metric-chip-label">${escapeHtml(label)}</span>
+            <strong>${formatMetricValue(safeMetrics[key])}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 async function readJsonResponse(response) {
@@ -157,6 +187,17 @@ function syncNavigation(projectId, versionId = "") {
     }
     link.href = targetUrl.toString();
   }
+
+  for (const link of elements.dssLinks) {
+    const targetUrl = new URL("./dss.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    if (versionId) {
+      targetUrl.searchParams.set("model_version", versionId);
+    }
+    link.href = targetUrl.toString();
+  }
 }
 
 function graphUrl(projectId, versionId) {
@@ -201,12 +242,7 @@ function renderTable() {
       <td>${formatDateTime(item.created_at)}</td>
       <td>${escapeHtml(item.task_type || "—")}</td>
       <td>${escapeHtml(item.target || "—")}</td>
-      <td>
-        <div class="model-metric">
-          <strong>${formatMetricValue(item.metric_value)}</strong>
-          <small>${escapeHtml(item.primary_metric || "metric")}</small>
-        </div>
-      </td>
+      <td>${renderQualityMetrics(item.metrics, item.primary_metric)}</td>
       <td>
         <div class="model-metric">
           <strong>${escapeHtml(item.dataset_version_id || "—")}</strong>

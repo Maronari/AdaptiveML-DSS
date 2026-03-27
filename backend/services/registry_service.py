@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pandas as pd
 
-from backend.models.domain import DatasetVersion, ModelVersion, ProjectRecord
+from backend.models.domain import BackgroundJob, DatasetVersion, ModelVersion, ProjectRecord
 from backend.services.object_storage_service import ObjectStorageService
 from backend.services.settings import get_settings
 from storage.registry.filesystem import FilesystemRegistry
@@ -419,6 +419,7 @@ class RegistryService:
         projects = self.registry.read("projects")
         datasets = self.registry.read("datasets")
         models = self.registry.read("models")
+        jobs = self.registry.read("jobs")
         latest_comparison = self.registry.read("latest_comparison")
 
         project_exists = any(project["project_id"] == project_id for project in projects)
@@ -441,6 +442,10 @@ class RegistryService:
             [model for model in models if model["project_id"] != project_id],
         )
         self.registry.write(
+            "jobs",
+            [job for job in jobs if job.get("project_id") != project_id],
+        )
+        self.registry.write(
             "latest_comparison",
             [item for item in latest_comparison if item.get("project_id") != project_id],
         )
@@ -459,6 +464,134 @@ class RegistryService:
             "dataset_versions_removed": len(dataset_records),
             "model_versions_removed": len(model_records),
         }
+
+    def create_background_job(
+        self,
+        job_type: str,
+        project_id: str,
+        payload: dict[str, Any],
+    ) -> BackgroundJob:
+        """Persist a new queued background job."""
+        self._ensure_project_record(project_id)
+        jobs = self.registry.read("jobs")
+        now = self._now()
+        record = BackgroundJob(
+            job_id=self._new_version_id("job"),
+            job_type=job_type,
+            project_id=project_id,
+            status="queued",
+            payload=dict(payload),
+            created_at=now,
+            updated_at=now,
+        )
+        jobs.append(record.to_dict())
+        self.registry.write("jobs", jobs)
+        return record
+
+    def list_background_jobs(
+        self,
+        project_id: str | None = None,
+        job_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return background jobs optionally filtered by project and type."""
+        jobs = self.registry.read("jobs")
+        items = [
+            job
+            for job in jobs
+            if (project_id is None or job.get("project_id") == project_id)
+            and (job_type is None or job.get("job_type") == job_type)
+        ]
+        items.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        if limit is not None:
+            return items[:limit]
+        return items
+
+    def get_background_job(self, job_id: str) -> dict[str, Any]:
+        """Return one background job by id."""
+        jobs = self.registry.read("jobs")
+        for job in jobs:
+            if job.get("job_id") == job_id:
+                return job
+        raise ValueError(f"Background job '{job_id}' was not found.")
+
+    def claim_next_background_job(self, job_types: list[str], worker_name: str) -> dict[str, Any] | None:
+        """Claim the oldest queued job for the given worker job types."""
+        normalized_types = {str(item) for item in job_types}
+        jobs = self.registry.read("jobs")
+        queued_jobs = [
+            job for job in jobs
+            if job.get("status") == "queued" and job.get("job_type") in normalized_types
+        ]
+        if not queued_jobs:
+            return None
+
+        selected_job_id = min(queued_jobs, key=lambda item: item.get("created_at", ""))["job_id"]
+        now = self._now()
+        selected_job: dict[str, Any] | None = None
+        for job in jobs:
+            if job.get("job_id") != selected_job_id:
+                continue
+            job["status"] = "running"
+            job["worker_name"] = worker_name
+            job["started_at"] = now
+            job["updated_at"] = now
+            self._append_job_log_entry(job, worker_name, "Запуск обработки фоновой задачи.")
+            selected_job = job
+            break
+
+        self.registry.write("jobs", jobs)
+        return selected_job
+
+    def append_background_job_log(self, job_id: str, source: str, message: str) -> dict[str, Any]:
+        """Append one log line to a stored background job."""
+        jobs = self.registry.read("jobs")
+        updated_job: dict[str, Any] | None = None
+        for job in jobs:
+            if job.get("job_id") != job_id:
+                continue
+            job["updated_at"] = self._now()
+            self._append_job_log_entry(job, source, message)
+            updated_job = job
+            break
+        if updated_job is None:
+            raise ValueError(f"Background job '{job_id}' was not found.")
+        self.registry.write("jobs", jobs)
+        return updated_job
+
+    def finish_background_job(
+        self,
+        job_id: str,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        """Complete a background job with final status and payload."""
+        if status not in {"failed", "done"}:
+            raise ValueError("Background job final status must be 'failed' or 'done'.")
+
+        jobs = self.registry.read("jobs")
+        updated_job: dict[str, Any] | None = None
+        now = self._now()
+        for job in jobs:
+            if job.get("job_id") != job_id:
+                continue
+            job["status"] = status
+            job["updated_at"] = now
+            job["finished_at"] = now
+            job["result"] = result
+            job["error"] = error
+            self._append_job_log_entry(
+                job,
+                job.get("worker_name") or "worker",
+                "Задача завершена успешно." if status == "done" else f"Задача завершилась ошибкой: {error}",
+            )
+            updated_job = job
+            break
+        if updated_job is None:
+            raise ValueError(f"Background job '{job_id}' was not found.")
+        self.registry.write("jobs", jobs)
+        return updated_job
 
     @staticmethod
     def _primary_metric(task_type: str) -> str:
@@ -499,7 +632,7 @@ class RegistryService:
 
     def _migrate_legacy_registry(self) -> None:
         """Import old JSON registry collections into SQLite on first access."""
-        for name in ("projects", "datasets", "models", "latest_comparison"):
+        for name in ("projects", "datasets", "models", "latest_comparison", "jobs"):
             if self.registry.read(name):
                 continue
             legacy_payload = self.legacy_registry.read(name)
@@ -552,3 +685,15 @@ class RegistryService:
         slug = re.sub(r"[^a-z0-9а-я]+", "-", slug)
         slug = slug.strip("-")
         return slug or "project"
+
+    @staticmethod
+    def _append_job_log_entry(job: dict[str, Any], source: str, message: str) -> None:
+        """Append one timestamped log entry to a mutable job record."""
+        logs = job.setdefault("logs", [])
+        logs.append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "source": source,
+                "message": message,
+            }
+        )

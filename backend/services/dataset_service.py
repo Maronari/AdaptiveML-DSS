@@ -3,11 +3,13 @@ from __future__ import annotations
 import csv
 from io import BytesIO
 from pathlib import Path
+import re
 from typing import Any
 
 import pandas as pd
 from fastapi import UploadFile
 
+from automl.training.forecasting import build_timestamp_series, infer_timestamp_descriptor
 from backend.services.registry_service import RegistryService
 from backend.utils.io import dataframe_from_records, dataframe_to_records
 
@@ -74,6 +76,19 @@ class DatasetService:
         frame = await self.read_uploaded_tabular(upload)
         return self._build_inspection_summary(project_id=project_id, source_name=source_name, frame=frame)
 
+    async def inspect_uploaded_datasets(
+        self,
+        project_id: str,
+        uploads: list[UploadFile],
+    ) -> dict[str, Any]:
+        """Inspect multiple uploaded files combined into one dataset preview."""
+        source_names, frame = await self.read_uploaded_tabular_collection(uploads)
+        return self._build_inspection_summary(
+            project_id=project_id,
+            source_name=self._compose_source_name(source_names),
+            frame=frame,
+        )
+
     async def register_uploaded_dataset(
         self,
         project_id: str,
@@ -92,6 +107,28 @@ class DatasetService:
         )
         summary = self._build_summary(project_id=project_id, target=target, frame=frame)
         summary["source_name"] = source_name
+        summary["dataset_version"] = dataset_version.to_dict()
+        return summary
+
+    async def register_uploaded_datasets(
+        self,
+        project_id: str,
+        target: str,
+        uploads: list[UploadFile],
+    ) -> dict[str, Any]:
+        """Persist a combined dataset built from several uploaded files."""
+        source_names, frame = await self.read_uploaded_tabular_collection(uploads, target=target)
+        source_name = self._compose_source_name(source_names)
+        self._validate_training_frame(frame, target)
+        dataset_version = self.registry_service.create_dataset_version(
+            project_id=project_id,
+            source_name=source_name,
+            target=target,
+            frame=frame,
+        )
+        summary = self._build_summary(project_id=project_id, target=target, frame=frame)
+        summary["source_name"] = source_name
+        summary["source_files"] = source_names
         summary["dataset_version"] = dataset_version.to_dict()
         return summary
 
@@ -131,6 +168,27 @@ class DatasetService:
 
         suffix = Path(upload.filename).suffix.lower()
         return self.read_tabular_bytes(content=content, suffix=suffix)
+
+    async def read_uploaded_tabular_collection(
+        self,
+        uploads: list[UploadFile],
+        target: str | None = None,
+    ) -> tuple[list[str], pd.DataFrame]:
+        """Read and combine several uploaded tabular files into one DataFrame."""
+        valid_uploads = [upload for upload in uploads if upload is not None]
+        if not valid_uploads:
+            raise ValueError("Choose at least one CSV or Excel file.")
+
+        source_names: list[str] = []
+        frames: list[tuple[str, pd.DataFrame]] = []
+        for upload in valid_uploads:
+            source_name = upload.filename or ""
+            if not source_name:
+                raise ValueError("Uploaded file must have a filename.")
+            source_names.append(source_name)
+            frames.append((source_name, await self.read_uploaded_tabular(upload)))
+
+        return source_names, self._combine_frames(frames, target=target)
 
     @staticmethod
     def read_tabular_file(path: str | Path) -> pd.DataFrame:
@@ -175,6 +233,103 @@ class DatasetService:
             "task_type": self.infer_task_type(frame[target]),
             "sample_rows": dataframe_to_records(frame.head(12)),
         }
+
+    @staticmethod
+    def _compose_source_name(source_names: list[str]) -> str:
+        """Create a compact source label for one or many uploaded files."""
+        if not source_names:
+            return "uploaded.csv"
+        if len(source_names) == 1:
+            return source_names[0]
+        preview = ", ".join(source_names[:3])
+        suffix = "" if len(source_names) <= 3 else f" и ещё {len(source_names) - 3}"
+        return f"{len(source_names)} файлов: {preview}{suffix}"
+
+    @staticmethod
+    def _column_alias(source_name: str, column: str) -> str:
+        """Build a stable suffix for conflicting columns across files."""
+        stem = Path(source_name).stem
+        normalized = re.sub(r"[^0-9A-Za-zА-Яа-я_]+", "_", stem).strip("_").lower() or "source"
+        return f"{column}__{normalized}"
+
+    @staticmethod
+    def _extract_merge_timestamp(frame: pd.DataFrame) -> tuple[pd.Series | None, str | None]:
+        """Infer a timestamp series suitable for multi-file alignment."""
+        descriptor = infer_timestamp_descriptor(frame=frame, target="__missing_target__")
+        if descriptor is None:
+            return None, None
+
+        timestamp_series = build_timestamp_series(frame=frame, descriptor=descriptor)
+        if timestamp_series.notna().mean() < 0.8:
+            return None, None
+
+        if descriptor.strategy == "datetime_column":
+            source_column = descriptor.timestamp_column
+        else:
+            source_column = descriptor.date_column
+        return timestamp_series, source_column
+
+    @classmethod
+    def _prepare_frame_for_merge(cls, source_name: str, frame: pd.DataFrame) -> pd.DataFrame:
+        """Attach a canonical timestamp column and deduplicate timestamps before merge."""
+        timestamp_series, source_timestamp_column = cls._extract_merge_timestamp(frame)
+        if timestamp_series is None:
+            raise ValueError(
+                f"Could not infer a common time axis for '{source_name}'. "
+                "Batch upload expects each file to contain a datetime column or a date+hour pair."
+            )
+
+        prepared = frame.copy()
+        prepared.insert(0, "__merge_timestamp__", timestamp_series)
+        prepared = prepared.dropna(subset=["__merge_timestamp__"]).sort_values("__merge_timestamp__")
+        prepared = prepared.groupby("__merge_timestamp__", as_index=False).last()
+
+        if source_timestamp_column and source_timestamp_column in prepared.columns:
+            prepared = prepared.drop(columns=[source_timestamp_column])
+
+        return prepared
+
+    @classmethod
+    def _combine_frames(
+        cls,
+        frames: list[tuple[str, pd.DataFrame]],
+        target: str | None = None,
+    ) -> pd.DataFrame:
+        """Combine one or many source frames into a training-ready dataset."""
+        if not frames:
+            raise ValueError("At least one dataset is required.")
+        if len(frames) == 1:
+            return frames[0][1]
+
+        prepared_frames = [(source_name, cls._prepare_frame_for_merge(source_name, frame)) for source_name, frame in frames]
+        merged = prepared_frames[0][1]
+
+        for source_name, next_frame in prepared_frames[1:]:
+            overlapping_columns = [
+                column for column in next_frame.columns
+                if column != "__merge_timestamp__" and column in merged.columns
+            ]
+            temporary_names = {column: f"__dup__{column}" for column in overlapping_columns}
+            renamed_frame = next_frame.rename(columns=temporary_names)
+            merged = merged.merge(renamed_frame, on="__merge_timestamp__", how="outer")
+
+            for column in overlapping_columns:
+                duplicate_column = temporary_names[column]
+                conflict_mask = (
+                    merged[column].notna()
+                    & merged[duplicate_column].notna()
+                    & (merged[column].astype(str) != merged[duplicate_column].astype(str))
+                )
+                if conflict_mask.any():
+                    merged[cls._column_alias(source_name, column)] = merged[duplicate_column]
+                merged[column] = merged[column].combine_first(merged[duplicate_column])
+                merged = merged.drop(columns=[duplicate_column])
+
+        merged = merged.rename(columns={"__merge_timestamp__": "timestamp"})
+        normalized = cls._normalize_frame(merged.sort_values("timestamp").reset_index(drop=True))
+        if target and target in normalized.columns:
+            normalized = normalized[normalized[target].notna()].reset_index(drop=True)
+        return normalized
 
     def _build_inspection_summary(
         self,

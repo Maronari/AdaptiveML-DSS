@@ -290,6 +290,7 @@ class TabularAutoMLAdapter:
             task_type=task_type,
             y_true=y_test,
             y_pred=predictions,
+            parameter_count=len(feature_names) + 1 if task_type == "regression" else None,
         )
         holdout_predictions = self._build_holdout_predictions(
             x_holdout=x_test,
@@ -412,6 +413,7 @@ class TabularAutoMLAdapter:
             task_type=task_type,
             y_true=y_test,
             y_pred=predictions,
+            parameter_count=len(feature_names) + 1 if task_type == "regression" else None,
         )
         holdout_predictions = self._build_holdout_predictions(
             x_holdout=x_test,

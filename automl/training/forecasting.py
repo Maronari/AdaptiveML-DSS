@@ -68,18 +68,31 @@ def build_forecasting_bundle(
         return None
 
     feature_columns = [column for column in feature_frame.columns if column not in {"timestamp", target}]
+    x_all = feature_frame[feature_columns]
+    y_all = feature_frame[target]
     x_train = feature_frame.iloc[:split_index][feature_columns]
     y_train = feature_frame.iloc[:split_index][target]
     x_test = feature_frame.iloc[split_index:][feature_columns]
     y_test = feature_frame.iloc[split_index:][target]
 
+    evaluation_model = RandomForestRegressor(
+        n_estimators=400,
+        random_state=random_state,
+    )
+    evaluation_model.fit(x_train, y_train)
+    predictions = evaluation_model.predict(x_test)
+    metrics = evaluate_predictions(
+        task_type="regression",
+        y_true=y_test,
+        y_pred=predictions,
+        parameter_count=len(feature_columns) + 1,
+    )
     model = RandomForestRegressor(
         n_estimators=400,
         random_state=random_state,
     )
-    model.fit(x_train, y_train)
-    predictions = model.predict(x_test)
-    metrics = evaluate_predictions(task_type="regression", y_true=y_test, y_pred=predictions)
+    model.fit(x_all, y_all)
+    historical_fit_predictions = model.predict(x_all)
 
     timestamp_series = series_frame["timestamp"]
     frequency_minutes = infer_frequency_minutes(timestamp_series)
@@ -97,6 +110,14 @@ def build_forecasting_bundle(
         "base_frequency_minutes": frequency_minutes,
         "default_horizon_minutes": min(30, frequency_minutes) if frequency_minutes > 0 else 30,
         "metrics": metrics,
+        "historical_fit": [
+            {
+                "timestamp": row["timestamp"].isoformat(),
+                "target": float(row[target]),
+                "prediction": round(float(prediction), 6),
+            }
+            for (_, row), prediction in zip(feature_frame.iterrows(), historical_fit_predictions, strict=False)
+        ],
         "history_targets": [float(value) for value in series_frame[target].tail(history_window).tolist()],
         "recent_history": [
             {
@@ -174,6 +195,7 @@ def run_forecast_from_bundle(
         "base_frequency_minutes": base_frequency,
         "forecasting_model": forecasting["forecasting_model"],
         "forecast_metrics": forecasting["metrics"],
+        "historical_fit": list(forecasting.get("historical_fit") or []),
         "recent_history": list(forecasting["recent_history"]),
         "forecast": future_points,
         "warning": warning,

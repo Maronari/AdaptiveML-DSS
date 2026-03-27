@@ -38,6 +38,7 @@ nav:
   - Главная: index.md
   - Установка: setup.md
   - Архитектура: architecture.md
+  - СППР: dss.md
   - Схема БД: database.md
   - Общая ER-диаграмма: database-single-diagram.md
   - API: api.md

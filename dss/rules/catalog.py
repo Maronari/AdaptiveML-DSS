@@ -1,17 +1,7 @@
-DEFAULT_RULES = [
-    {
-        "risk_level": "high",
-        "scenario": "manual_review",
-        "summary": "High-risk case requires immediate mitigation and manual review.",
-    },
-    {
-        "risk_level": "medium",
-        "scenario": "targeted_diagnostics",
-        "summary": "Medium-risk case requires targeted diagnostics and follow-up.",
-    },
-    {
-        "risk_level": "low",
-        "scenario": "observe",
-        "summary": "Low-risk case can remain under observation.",
-    },
-]
+from __future__ import annotations
+
+from dss.rules.loader import get_rule_set_config
+
+
+_rule_set_name, _rule_set = get_rule_set_config("inline_default")
+DEFAULT_RULES = list(_rule_set.get("rules") or [])

@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Загрузка данных</title>
-    <link rel="stylesheet" href="./styles.css?v=20260325-0200" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260325-0200" />
+    <link rel="stylesheet" href="./styles.css?v=20260327-0240" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260327-0240" />
   </head>
   <body class="training-page upload-page">
     <main class="page-shell training-shell">
@@ -20,6 +20,7 @@
           <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
         </div>
       </header>
 
@@ -40,8 +41,8 @@
             <div class="upload-sidebar">
               <form id="upload-form" class="training-form-grid upload-form-grid">
                 <label class="field field-span-1">
-                  <span>Файл датасета</span>
-                  <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" />
+                  <span>Файлы датасета</span>
+                  <input id="dataset-file" name="file" type="file" accept=".csv,.xlsx,.xls" multiple />
                 </label>
 
                 <label class="field field-span-1">
@@ -133,6 +134,6 @@
       </section>
     </main>
 
-    <script type="module" src="./upload.js?v=20260325-0200"></script>
+    <script type="module" src="./upload.js?v=20260327-0240"></script>
   </body>
 </html>
