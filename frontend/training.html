@@ -4,20 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Обучение модели</title>
-    <link rel="stylesheet" href="./styles.css?v=20260327-0815" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260327-0815" />
+    <link rel="stylesheet" href="./styles.css?v=20260328-1130" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260328-1130" />
   </head>
   <body class="training-page">
     <main class="page-shell training-shell">
       <header class="app-header training-header">
         <div class="app-header-copy">
           <h1>AutoML</h1>
-          <p class="page-subtitle">Обучение и переобучение модели проекта</p>
+          <p class="page-subtitle">Запуск новой модели по сохраненному датасету проекта</p>
         </div>
         <div class="page-actions">
           <a href="./index.html" class="button button-secondary">Проекты</a>
           <a href="./upload.html" class="button button-secondary" data-nav-upload>Данные</a>
           <a href="./training.html" class="button button-primary" data-nav-training>Обучение</a>
+          <a href="./retraining.html" class="button button-secondary" data-nav-retraining>Дообучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
           <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
@@ -35,7 +36,6 @@
             <div class="training-action-strip">
               <button type="button" id="validate-button" class="button button-secondary">Проверить</button>
               <button type="button" id="train-button" class="button button-primary">Обучить</button>
-              <button type="button" id="retrain-button" class="button button-secondary">Переобучить</button>
               <button type="button" id="monitor-button" class="button button-secondary">Мониторинг</button>
             </div>
           </div>
@@ -98,28 +98,6 @@
               <input id="test-size" name="test_size" type="number" min="0.05" max="0.95" step="0.05" value="0.20" />
             </label>
 
-            <label class="field field-span-1">
-              <span>Окно переобучения</span>
-              <select id="retrain-history-scope" name="history_scope">
-                <option value="all_history" selected>Вся история + новый пакет</option>
-                <option value="last_30_days">Последние 30 дней + новый пакет</option>
-                <option value="last_60_days">Последние 60 дней + новый пакет</option>
-                <option value="last_90_days">Последние 90 дней + новый пакет</option>
-              </select>
-            </label>
-
-            <label class="field field-span-1">
-              <span>Мин. выгода, %</span>
-              <input
-                id="retrain-improvement-threshold"
-                name="minimum_relative_improvement_percent"
-                type="number"
-                min="0"
-                step="0.5"
-                value="3"
-              />
-            </label>
-
             <div class="field field-span-2">
               <span>Алгоритмы LightAutoML</span>
               <div id="algo-options" class="algo-grid algo-grid-compact">
@@ -149,14 +127,6 @@
                 </label>
               </div>
             </div>
-
-            <div class="field field-span-2">
-              <span>Политика активации</span>
-              <label class="toggle">
-                <input id="retrain-auto-activate" name="auto_activate" type="checkbox" checked />
-                <span>Активировать кандидата автоматически только при достижении порога выгоды</span>
-              </label>
-            </div>
           </form>
 
           <div class="training-footer">
@@ -179,6 +149,6 @@
       </section>
     </main>
 
-    <script type="module" src="./training.js?v=20260327-0815"></script>
+    <script type="module" src="./training.js?v=20260328-1130"></script>
   </body>
 </html>

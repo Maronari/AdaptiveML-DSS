@@ -1164,6 +1164,99 @@ def test_retraining_recent_window_uses_last_30_days_history(client: TestClient):
     assert body["selection_summary"]["candidate_training_rows"] == 55
 
 
+def test_retraining_inspect_file_returns_champion_compatibility(client: TestClient):
+    dataset = build_retraining_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "retrain-inspect-demo",
+            "target": "target",
+            "records": dataset[:150],
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    new_frame = pd.DataFrame(dataset[150:])
+    payload = BytesIO()
+    new_frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/retraining/inspect/file",
+        files={
+            "file": (
+                "retrain_batch.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "retrain-inspect-demo"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["expected_target"] == "target"
+    assert body["recommended_target"] == "target"
+    assert body["champion_model"]["target"] == "target"
+    assert body["champion_model"]["version_id"]
+    assert body["compatibility"]["ready"] is True
+    assert body["compatibility"]["target_present"] is True
+    assert body["compatibility"]["missing_inputs"] == []
+    assert body["compatibility"]["validation_error"] is None
+    assert body["project_context"]["model_versions"] == 1
+
+
+def test_retraining_inspect_file_reports_missing_features(client: TestClient):
+    dataset = build_hourly_energy_dataset()
+    frame = pd.DataFrame(dataset)
+    target_column = frame.columns[-1]
+    missing_column = frame.columns[0]
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "retrain-inspect-missing-demo",
+            "target": target_column,
+            "records": dataset,
+            "training_options": {
+                "task_type": "regression",
+                "backend": "sklearn",
+                "enable_forecast": False,
+            },
+        },
+    )
+    assert train_response.status_code == 200
+
+    frame = frame.drop(columns=[missing_column])
+    payload = BytesIO()
+    frame.to_excel(payload, index=False)
+    payload.seek(0)
+
+    response = client.post(
+        "/retraining/inspect/file",
+        files={
+            "file": (
+                "missing_hour.xlsx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"project_id": "retrain-inspect-missing-demo"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["expected_target"] == target_column
+    assert body["compatibility"]["ready"] is False
+    assert body["compatibility"]["target_present"] is True
+    assert body["compatibility"]["missing_features"] == [missing_column]
+    assert body["compatibility"]["missing_inputs"] == [missing_column]
+    assert frame.columns[0] in body["compatibility"]["uploaded_columns"]
+
+
 def test_jobs_monitoring_endpoint_returns_queued_job_and_can_be_polled(client: TestClient):
     create_response = client.post("/projects", json={"name": "Jobs Demo"})
     assert create_response.status_code == 201

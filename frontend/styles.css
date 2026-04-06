@@ -989,8 +989,8 @@ body.projects-page {
 }
 
 .training-action-strip {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: end;
 }
@@ -1155,7 +1155,8 @@ body.projects-page {
   align-items: start;
   gap: 10px;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
 }
@@ -1287,6 +1288,32 @@ body.projects-page {
   min-height: 0;
   padding: 12px;
   overflow: hidden;
+}
+
+.retraining-sidebar {
+  grid-template-rows: max-content max-content max-content max-content;
+}
+
+.retraining-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.retraining-detail-grid {
+  align-content: start;
+}
+
+.retraining-options-card {
+  min-height: 0;
+  gap: 12px;
+}
+
+.retraining-options-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.retraining-toggle {
+  min-height: 52px;
 }
 
 .upload-table-shell {

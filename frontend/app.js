@@ -13,6 +13,7 @@ const state = {
   model: null,
   forecast: null,
   displayForecast: null,
+  timelineRows: null,
   error: null,
   selectedIntervalMinutes: null,
   selectedPointCount: null,
@@ -31,7 +32,14 @@ const chartState = {
   dragWindow: 1,
   isDragging: false,
   hoverPointId: null,
+  tooltipPointId: null,
   renderedPoints: [],
+  renderFrame: 0,
+  theme: null,
+  canvasWidth: 0,
+  canvasHeight: 0,
+  canvasPixelWidth: 0,
+  canvasPixelHeight: 0,
 };
 
 const elements = {
@@ -63,6 +71,7 @@ const elements = {
   pointCountMax: document.getElementById("point-count-max"),
   uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
@@ -121,7 +130,11 @@ function getThemeValue(name, fallback) {
 }
 
 function getChartTheme() {
-  return {
+  if (chartState.theme) {
+    return chartState.theme;
+  }
+
+  chartState.theme = {
     background: getThemeValue("--chart-bg", "#ffffff"),
     axis: getThemeValue("--chart-axis", "rgba(50, 70, 97, 0.24)"),
     grid: getThemeValue("--chart-grid", "rgba(50, 70, 97, 0.1)"),
@@ -132,6 +145,7 @@ function getChartTheme() {
     model: getThemeValue("--chart-model", "#da8b2b"),
     divider: getThemeValue("--line-strong", "rgba(50, 70, 97, 0.28)"),
   };
+  return chartState.theme;
 }
 
 function setChartFont(context, size = 12, weight = 400) {
@@ -467,6 +481,14 @@ function syncNavigation(projectId) {
     link.href = targetUrl.toString();
   }
 
+  for (const link of elements.retrainingLinks) {
+    const targetUrl = new URL("./retraining.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
   for (const link of elements.modelsLinks) {
     const targetUrl = new URL("./models.html", window.location.href);
     if (projectId) {
@@ -532,6 +554,7 @@ function getPointId(point) {
 
 function hideTooltip() {
   elements.chartTooltip.hidden = true;
+  chartState.tooltipPointId = null;
 }
 
 function showTooltip(pointLayout) {
@@ -562,17 +585,29 @@ function showTooltip(pointLayout) {
   tooltip.style.top = `${top}px`;
 }
 
-function clearHoverPoint({ rerender = true } = {}) {
-  if (chartState.hoverPointId === null) {
+function clearHoverPoint() {
+  if (chartState.hoverPointId === null && elements.chartTooltip.hidden) {
     hideTooltip();
     return;
   }
 
   chartState.hoverPointId = null;
   hideTooltip();
-  if (rerender) {
-    renderChart();
+}
+
+function invalidateTimelineRows() {
+  state.timelineRows = null;
+}
+
+function scheduleChartRender() {
+  if (chartState.renderFrame) {
+    return;
   }
+
+  chartState.renderFrame = window.requestAnimationFrame(() => {
+    chartState.renderFrame = 0;
+    renderChart();
+  });
 }
 
 function toTimestampMs(value) {
@@ -672,6 +707,10 @@ function getModelHistoryRows() {
 }
 
 function getTimelineRows() {
+  if (Array.isArray(state.timelineRows)) {
+    return state.timelineRows;
+  }
+
   const rowsByTimestamp = new Map();
 
   const ensureRow = (timestamp) => {
@@ -723,9 +762,10 @@ function getTimelineRows() {
     }
   });
 
-  return Array.from(rowsByTimestamp.values()).sort(
+  state.timelineRows = Array.from(rowsByTimestamp.values()).sort(
     (left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp),
   );
+  return state.timelineRows;
 }
 
 function applyDisplayPointCount(pointCount, { resetZoom = false } = {}) {
@@ -741,6 +781,7 @@ function applyDisplayPointCount(pointCount, { resetZoom = false } = {}) {
     displayStepMinutes: Number((state.request.totalMinutes / resolvedPointCount).toFixed(6)),
   };
   state.displayForecast = buildDisplayForecast(state.forecast, state.request);
+  invalidateTimelineRows();
 
   if (resetZoom) {
     resetViewport();
@@ -790,14 +831,14 @@ function setInteractiveState() {
 }
 
 function clearPredictionTable(message = "После загрузки прогноза здесь появятся точки предсказания.") {
-  elements.predictionTableBody.replaceChildren();
+  elements.predictionTableBody.innerHTML = "";
   elements.predictionTableEmpty.hidden = false;
   elements.predictionTableEmpty.textContent = message;
 }
 
 function renderPredictionTable() {
   const rows = Array.isArray(state.displayForecast) ? state.displayForecast : [];
-  elements.predictionTableBody.replaceChildren();
+  elements.predictionTableBody.innerHTML = "";
 
   if (!rows.length) {
     clearPredictionTable(
@@ -806,26 +847,12 @@ function renderPredictionTable() {
     return;
   }
 
-  const fragment = document.createDocumentFragment();
-  rows.forEach((item) => {
-    const row = document.createElement("tr");
-
-    const stepCell = document.createElement("td");
-    stepCell.textContent = String(item.step);
-    row.append(stepCell);
-
-    const timeCell = document.createElement("td");
-    timeCell.textContent = formatTimestamp(item.timestamp);
-    row.append(timeCell);
-
-    const predictionCell = document.createElement("td");
-    predictionCell.textContent = formatNumber(item.prediction);
-    row.append(predictionCell);
-
-    fragment.append(row);
-  });
-
-  elements.predictionTableBody.append(fragment);
+  elements.predictionTableBody.innerHTML = rows
+    .map(
+      (item) =>
+        `<tr><td>${item.step}</td><td>${formatTimestamp(item.timestamp)}</td><td>${formatNumber(item.prediction)}</td></tr>`,
+    )
+    .join("");
   elements.predictionTableEmpty.hidden = true;
 }
 
@@ -866,8 +893,23 @@ function prepareCanvas(canvas, fallbackHeight = DEFAULT_CHART_HEIGHT) {
   const parentWidth = canvas.parentElement.clientWidth;
   const height = getCanvasHeight(canvas, fallbackHeight);
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.floor(parentWidth * ratio);
-  canvas.height = Math.floor(height * ratio);
+  const pixelWidth = Math.floor(parentWidth * ratio);
+  const pixelHeight = Math.floor(height * ratio);
+
+  if (
+    chartState.canvasWidth !== parentWidth ||
+    chartState.canvasHeight !== height ||
+    chartState.canvasPixelWidth !== pixelWidth ||
+    chartState.canvasPixelHeight !== pixelHeight
+  ) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+    chartState.canvasWidth = parentWidth;
+    chartState.canvasHeight = height;
+    chartState.canvasPixelWidth = pixelWidth;
+    chartState.canvasPixelHeight = pixelHeight;
+  }
+
   const context = canvas.getContext("2d");
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   return {
@@ -905,6 +947,29 @@ function drawLegend(context, entries, theme) {
     context.fillText(entry.label, x, y);
     x += context.measureText(entry.label).width + 24;
   }
+}
+
+function drawPointMarkers(context, points, color, radius) {
+  if (!points.length) {
+    return;
+  }
+
+  context.beginPath();
+  points.forEach((point) => {
+    context.moveTo(point.x + radius, point.y);
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  });
+  context.fillStyle = color;
+  context.fill();
+
+  context.beginPath();
+  points.forEach((point) => {
+    context.moveTo(point.x + radius, point.y);
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  });
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 1.5;
+  context.stroke();
 }
 
 function buildXAxisTicks(items, maxTickCount = 6) {
@@ -989,7 +1054,18 @@ function drawForecastChart() {
   const theme = getChartTheme();
   const bounds = getPlotBounds(width, height);
   const visibleSlice = getVisibleSlice(timelineRows);
-  const values = visibleSlice.rows.flatMap((item) => [item.actual, item.model, item.forecast].filter(Number.isFinite));
+  const values = [];
+  visibleSlice.rows.forEach((item) => {
+    if (Number.isFinite(item.actual)) {
+      values.push(item.actual);
+    }
+    if (Number.isFinite(item.model)) {
+      values.push(item.model);
+    }
+    if (Number.isFinite(item.forecast)) {
+      values.push(item.forecast);
+    }
+  });
 
   context.clearRect(0, 0, width, height);
   context.fillStyle = theme.background;
@@ -1165,19 +1241,9 @@ function drawForecastChart() {
     chartState.hoverPointId = null;
   }
 
-  pointLayouts.forEach((point) => {
-    const isHovered = hoveredPoint?.pointId === point.pointId;
-    const radius = isHovered ? 5 : point.series === "forecast" ? 3 : 2.75;
-    context.fillStyle =
-      point.series === "forecast" ? theme.predicted : point.series === "model" ? theme.model : theme.actual;
-    context.beginPath();
-    context.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    context.fill();
-
-    context.strokeStyle = "#ffffff";
-    context.lineWidth = isHovered ? 2 : 1.5;
-    context.stroke();
-  });
+  drawPointMarkers(context, historyPoints, theme.actual, 2.75);
+  drawPointMarkers(context, modelPoints, theme.model, 2.75);
+  drawPointMarkers(context, forecastPoints, theme.predicted, 3);
 
   context.fillStyle = theme.text;
   setChartFont(context, 11, 600);
@@ -1310,7 +1376,7 @@ function handleChartHover(event) {
   }
 
   chartState.hoverPointId = nearestPoint.pointId;
-  renderChart();
+  showTooltip(nearestPoint);
 }
 
 function handleChartWheel(event) {
@@ -1336,7 +1402,7 @@ function handleChartWheel(event) {
 
   chartState.viewStart = nextStart;
   chartState.viewEnd = nextStart + nextWindow;
-  renderChart();
+  scheduleChartRender();
 }
 
 function handlePointerDown(event) {
@@ -1344,7 +1410,7 @@ function handlePointerDown(event) {
     return;
   }
 
-  clearHoverPoint({ rerender: false });
+  clearHoverPoint();
   chartState.isDragging = true;
   chartState.pointerId = event.pointerId;
   chartState.dragStartX = event.clientX;
@@ -1352,7 +1418,7 @@ function handlePointerDown(event) {
   chartState.dragWindow = chartState.viewEnd - chartState.viewStart;
 
   elements.chartCanvas.setPointerCapture(event.pointerId);
-  renderChart();
+  scheduleChartRender();
   event.preventDefault();
 }
 
@@ -1376,7 +1442,7 @@ function handlePointerMove(event) {
 
   chartState.viewStart = nextStart;
   chartState.viewEnd = nextStart + chartState.dragWindow;
-  renderChart();
+  scheduleChartRender();
 }
 
 function stopDrag(pointerId = null) {
@@ -1390,13 +1456,14 @@ function stopDrag(pointerId = null) {
   chartState.isDragging = false;
   chartState.pointerId = null;
   hideTooltip();
-  renderChart();
+  scheduleChartRender();
 }
 
 async function loadForecast(intervalMinutes, pointCount = state.selectedPointCount, { resetZoom = true } = {}) {
   if (!state.model?.forecasting?.available) {
     state.forecast = null;
     state.displayForecast = null;
+    invalidateTimelineRows();
     state.request = null;
     syncPointCountControls(null);
     renderAll();
@@ -1428,6 +1495,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
     state.forecast = forecast;
     state.request = request;
     state.displayForecast = buildDisplayForecast(forecast, request);
+    invalidateTimelineRows();
     if (resetZoom) {
       resetViewport();
     }
@@ -1439,6 +1507,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
 
     state.forecast = null;
     state.displayForecast = null;
+    invalidateTimelineRows();
     state.request = request;
     state.error = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1455,6 +1524,7 @@ async function loadModelAndGraph() {
   state.error = null;
   state.forecast = null;
   state.displayForecast = null;
+  invalidateTimelineRows();
   state.request = null;
   state.availablePointCounts = [];
   state.selectedPointCount = null;
@@ -1486,12 +1556,12 @@ async function loadModelAndGraph() {
 }
 
 function handleResize() {
-  renderChart();
+  scheduleChartRender();
 }
 
 elements.chartResetButton.addEventListener("click", () => {
   resetViewport();
-  renderChart();
+  scheduleChartRender();
 });
 
 elements.intervalSlider.addEventListener("input", () => {

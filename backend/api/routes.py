@@ -365,6 +365,36 @@ def run_retraining(payload: RetrainRequest) -> dict[str, Any]:
         raise _bad_request(exc) from exc
 
 
+@router.post("/retraining/inspect/file", tags=["training"])
+async def inspect_retraining_file(
+    file: UploadFile = File(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Inspect one uploaded dataset against the champion model before retraining."""
+    try:
+        return await retraining_service.inspect_retraining_upload(
+            project_id=project_id,
+            upload=file,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/retraining/inspect/files", tags=["training"])
+async def inspect_retraining_files(
+    files: list[UploadFile] = File(...),
+    project_id: str = Form("default"),
+) -> dict[str, Any]:
+    """Inspect several uploaded datasets against the champion model before retraining."""
+    try:
+        return await retraining_service.inspect_retraining_uploads(
+            project_id=project_id,
+            uploads=files,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
 @router.post("/retraining/run/file", tags=["training"])
 async def run_retraining_file(
     file: UploadFile = File(...),

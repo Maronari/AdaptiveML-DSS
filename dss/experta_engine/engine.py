@@ -5,6 +5,10 @@ from typing import Any
 from dss.recommendations.formatter import format_recommendation
 from dss.rules.loader import get_rule_set_config
 
+# Compatibility flag preserved for legacy integration tests and callers.
+# The DSS engine is now config-driven and no longer uses the Experta runtime.
+EXPERTA_AVAILABLE = False
+
 
 class DecisionEngine:
     def __init__(self, default_rule_set: str | None = None) -> None:

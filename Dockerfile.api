@@ -13,6 +13,6 @@ COPY requirements.txt ./requirements.txt
 COPY requirements-core.txt ./requirements-core.txt
 COPY scripts/setup_full_env.sh ./scripts/setup_full_env.sh
 
-RUN bash ./scripts/setup_full_env.sh python
+RUN sed -i 's/\r$//' ./scripts/setup_full_env.sh && bash ./scripts/setup_full_env.sh python
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

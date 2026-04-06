@@ -27,6 +27,7 @@ const elements = {
   statusBanner: document.getElementById("status-banner"),
   uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
@@ -130,6 +131,14 @@ function syncNavigation(projectId) {
 
   for (const link of elements.trainingLinks) {
     const targetUrl = new URL("./training.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.retrainingLinks) {
+    const targetUrl = new URL("./retraining.html", window.location.href);
     if (normalizedProjectId) {
       targetUrl.searchParams.set("project_id", normalizedProjectId);
     }

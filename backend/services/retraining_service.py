@@ -73,6 +73,124 @@ class RetrainingService:
         self.adapter = TabularAutoMLAdapter()
         self.prediction_service = PredictionService()
 
+    async def inspect_retraining_upload(
+        self,
+        project_id: str,
+        upload: UploadFile,
+    ) -> dict[str, Any]:
+        """Inspect whether one uploaded dataset can be used for retraining."""
+        source_name = upload.filename or "uploaded.csv"
+        frame = await self.dataset_service.read_uploaded_tabular(upload)
+        return self.inspect_retraining_frame(
+            project_id=project_id,
+            source_name=source_name,
+            frame=frame,
+        )
+
+    async def inspect_retraining_uploads(
+        self,
+        project_id: str,
+        uploads: list[UploadFile],
+    ) -> dict[str, Any]:
+        """Inspect whether several uploaded datasets can be combined for retraining."""
+        source_names, frame = await self.dataset_service.read_uploaded_tabular_collection(uploads)
+        inspection = self.inspect_retraining_frame(
+            project_id=project_id,
+            source_name=self.dataset_service._compose_source_name(source_names),
+            frame=frame,
+        )
+        inspection["source_files"] = source_names
+        return inspection
+
+    def inspect_retraining_frame(
+        self,
+        project_id: str,
+        source_name: str,
+        frame: pd.DataFrame,
+    ) -> dict[str, Any]:
+        """Build upload preview together with compatibility against the champion model."""
+        try:
+            champion, bundle = self.registry_service.get_champion_bundle(project_id)
+        except ValueError as exc:
+            raise ValueError(
+                f"Для дообучения сначала обучите champion-модель в проекте '{project_id}'."
+            ) from exc
+
+        inspection = self.dataset_service._build_inspection_summary(
+            project_id=project_id,
+            source_name=source_name,
+            frame=frame,
+        )
+
+        expected_target = champion["target"]
+        uploaded_columns = inspection["columns"]
+        target_present = expected_target in frame.columns
+        inference_frame = frame.drop(columns=[expected_target]) if target_present else frame
+        prepared = self.prediction_service._prepare_frame(bundle, inference_frame)
+        prepared_columns = prepared.columns.tolist()
+        expected_features = bundle["feature_names"]
+        missing_features = [
+            feature for feature in expected_features if feature not in prepared_columns
+        ]
+        preprocessor = bundle.get("preprocessor")
+        missing_inputs = self.prediction_service._resolve_missing_inputs(
+            inference_frame=inference_frame,
+            preprocessor=preprocessor,
+            missing_features=missing_features,
+        )
+        expected_input_columns = set(expected_features)
+        if preprocessor is not None:
+            expected_input_columns.update(getattr(preprocessor, "datetime_columns", []))
+            expected_input_columns.update(getattr(preprocessor, "time_columns", []))
+
+        extra_features = [
+            column
+            for column in uploaded_columns
+            if column not in expected_input_columns and column != expected_target
+        ]
+
+        validation_error = None
+        if target_present:
+            try:
+                self.dataset_service._validate_training_frame(frame, expected_target)
+            except ValueError as exc:
+                validation_error = str(exc)
+        else:
+            validation_error = f"Target column '{expected_target}' is missing."
+
+        minimum_rows_required = 6
+        rows_check_passed = len(frame) >= minimum_rows_required
+        if validation_error is None and not rows_check_passed:
+            validation_error = f"Retraining batch must contain at least {minimum_rows_required} rows."
+
+        inspection["recommended_target"] = (
+            expected_target if expected_target in inspection["columns"] else inspection.get("recommended_target")
+        )
+        inspection["expected_target"] = expected_target
+        inspection["champion_model"] = {
+            "version_id": champion["version_id"],
+            "status": champion["status"],
+            "target": champion["target"],
+            "task_type": champion["task_type"],
+            "dataset_version_id": champion["dataset_version_id"],
+            "created_at": champion["created_at"],
+        }
+        inspection["compatibility"] = {
+            "ready": target_present and rows_check_passed and validation_error is None and not missing_features,
+            "target_present": target_present,
+            "target_matches_champion": target_present,
+            "uploaded_columns": uploaded_columns,
+            "prepared_columns": prepared_columns,
+            "expected_features": expected_features,
+            "missing_features": missing_features,
+            "missing_inputs": missing_inputs,
+            "extra_features": extra_features,
+            "minimum_rows_required": minimum_rows_required,
+            "rows_check_passed": rows_check_passed,
+            "validation_error": validation_error,
+        }
+        return inspection
+
     def retrain(
         self,
         project_id: str,

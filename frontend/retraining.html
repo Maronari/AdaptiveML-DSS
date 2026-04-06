@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS - Дообучение модели</title>
+    <link rel="stylesheet" href="./styles.css?v=20260328-1130" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260328-1130" />
+  </head>
+  <body class="training-page retraining-page">
+    <main class="page-shell training-shell">
+      <header class="app-header training-header">
+        <div class="app-header-copy">
+          <h1>AutoML</h1>
+          <p class="page-subtitle">Загрузка нового датасета и запуск дообучения champion-модели</p>
+        </div>
+        <div class="page-actions">
+          <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./upload.html" class="button button-secondary" data-nav-upload>Данные</a>
+          <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
+          <a href="./retraining.html" class="button button-primary" data-nav-retraining>Дообучение</a>
+          <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
+        </div>
+      </header>
+
+      <section class="workspace-board workspace-board-single training-board">
+        <section class="panel training-panel training-panel-compact upload-panel retraining-panel">
+          <div class="training-panel-head">
+            <div class="panel-heading training-panel-heading">
+              <p class="eyebrow">Дообучение</p>
+              <h2>Новый пакет данных для модели</h2>
+            </div>
+
+            <div class="training-action-strip">
+              <button type="button" id="retraining-submit-button" class="button button-primary" disabled>
+                Запустить дообучение
+              </button>
+            </div>
+          </div>
+
+          <section class="upload-content retraining-content">
+            <div class="upload-sidebar retraining-sidebar">
+              <form class="training-form-grid upload-form-grid retraining-form-grid">
+                <label class="field field-span-1">
+                  <span>Новые файлы датасета</span>
+                  <input id="retraining-file" name="file" type="file" accept=".csv,.xlsx,.xls" multiple />
+                </label>
+
+                <label class="field field-span-1">
+                  <span>Target champion-модели</span>
+                  <input id="retraining-target" readonly />
+                </label>
+
+                <label class="field field-span-1">
+                  <span>Тип задачи модели</span>
+                  <input id="retraining-task-type" readonly />
+                </label>
+
+                <label class="field field-span-1">
+                  <span>Бэкенд дообучения</span>
+                  <select id="retraining-backend">
+                    <option value="auto" selected>Выбрать автоматически</option>
+                    <option value="lightautoml">LightAutoML</option>
+                    <option value="sklearn">Резервный sklearn</option>
+                  </select>
+                </label>
+              </form>
+
+              <div class="upload-summary-grid">
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Строк</span>
+                  <strong id="retraining-summary-rows">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Колонок</span>
+                  <strong id="retraining-summary-columns">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Дубликатов</span>
+                  <strong id="retraining-summary-duplicates">—</strong>
+                </article>
+                <article class="upload-summary-card">
+                  <span class="upload-summary-label">Источник</span>
+                  <strong id="retraining-summary-source">—</strong>
+                </article>
+              </div>
+
+              <div class="upload-detail-grid retraining-detail-grid">
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Champion-модель</span>
+                  </div>
+                  <div id="retraining-champion-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">После разбора файла здесь появится активная модель проекта.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Совместимость</span>
+                  </div>
+                  <div id="retraining-compatibility-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Загрузите файл, чтобы проверить схему и обязательные поля.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Временной контекст</span>
+                  </div>
+                  <div id="retraining-temporal-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Временная структура появится после разбора файла.</p>
+                  </div>
+                </article>
+
+                <article class="upload-detail-card">
+                  <div class="upload-detail-head">
+                    <span class="upload-detail-title">Связь с проектом</span>
+                  </div>
+                  <div id="retraining-project-body" class="upload-detail-lines">
+                    <p class="upload-detail-empty">Контекст проекта появится после разбора файла.</p>
+                  </div>
+                </article>
+              </div>
+
+              <article class="upload-detail-card retraining-options-card">
+                <div class="upload-detail-head">
+                  <span class="upload-detail-title">Режим дообучения</span>
+                </div>
+                <div class="retraining-options-grid">
+                  <label class="field">
+                    <span>Окно истории</span>
+                    <select id="retraining-history-scope">
+                      <option value="all_history" selected>Вся история + новый пакет</option>
+                      <option value="last_30_days">Последние 30 дней + новый пакет</option>
+                      <option value="last_60_days">Последние 60 дней + новый пакет</option>
+                      <option value="last_90_days">Последние 90 дней + новый пакет</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Мин. улучшение, %</span>
+                    <input id="retraining-improvement-threshold" type="number" min="0" step="0.5" value="3" />
+                  </label>
+
+                  <label class="toggle retraining-toggle">
+                    <input id="retraining-auto-activate" type="checkbox" checked />
+                    <span>Автоматически активировать кандидата только если он обгонит champion по порогу выгоды</span>
+                  </label>
+                </div>
+              </article>
+            </div>
+
+            <section class="panel upload-preview-panel">
+              <div class="panel-heading upload-preview-heading">
+                <p class="eyebrow">Preview</p>
+              </div>
+              <div class="table-shell upload-table-shell">
+                <table id="retraining-preview-table">
+                  <thead id="retraining-preview-head"></thead>
+                  <tbody id="retraining-preview-body"></tbody>
+                </table>
+                <div id="retraining-preview-empty" class="table-placeholder">
+                  Загрузите CSV или Excel, и страница сразу проверит совместимость нового датасета с champion-моделью.
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <div class="training-footer">
+            <div id="retraining-note" class="field-note">
+              Страница сохраняет новый пакет как отдельную версию датасета и только затем ставит дообучение в очередь.
+            </div>
+            <div class="training-status-stack">
+              <div class="training-job-meta">
+                <span class="training-job-label">Статус задачи</span>
+                <div class="training-job-badges">
+                  <span id="retraining-job-status-pill" class="job-status-pill job-status-idle">idle</span>
+                  <span id="retraining-job-status-note" class="training-job-note">Очередь пуста.</span>
+                </div>
+              </div>
+              <div id="retraining-status-banner" class="status-banner status-idle">Готово.</div>
+              <div id="retraining-log" class="training-log" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./retraining.js?v=20260328-1130"></script>
+  </body>
+</html>

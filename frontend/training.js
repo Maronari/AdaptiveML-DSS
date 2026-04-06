@@ -1,8 +1,4 @@
 const state = {
-  validation: null,
-  training: null,
-  retraining: null,
-  monitoring: null,
   datasetSummary: null,
   activeJob: null,
   pollingTimer: null,
@@ -15,6 +11,7 @@ const elements = {
   projectIdInput: document.getElementById("project-id"),
   uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
@@ -26,14 +23,10 @@ const elements = {
   timeoutSecondsInput: document.getElementById("timeout-seconds"),
   cpuLimitInput: document.getElementById("cpu-limit"),
   testSizeInput: document.getElementById("test-size"),
-  retrainHistoryScopeInput: document.getElementById("retrain-history-scope"),
-  retrainImprovementThresholdInput: document.getElementById("retrain-improvement-threshold"),
-  retrainAutoActivateInput: document.getElementById("retrain-auto-activate"),
   algoInputs: Array.from(document.querySelectorAll('input[name="algo-option"]')),
   trainingOptionsNote: document.getElementById("training-options-note"),
   validateButton: document.getElementById("validate-button"),
   trainButton: document.getElementById("train-button"),
-  retrainButton: document.getElementById("retrain-button"),
   monitorButton: document.getElementById("monitor-button"),
   statusBanner: document.getElementById("status-banner"),
   jobStatusPill: document.getElementById("job-status-pill"),
@@ -47,6 +40,10 @@ function getPageContext() {
     projectId: searchParams.get("project_id")?.trim() || "demo",
     datasetVersionId: searchParams.get("dataset_version_id")?.trim() || "",
   };
+}
+
+function actionButtons() {
+  return [elements.validateButton, elements.trainButton, elements.monitorButton].filter(Boolean);
 }
 
 function selectedAlgorithms() {
@@ -69,18 +66,12 @@ function getWorkflowState() {
       cv_folds: Number.parseInt(elements.cvFoldsInput.value || "0", 10),
       enable_forecast: true,
     },
-    retrainingOptions: {
-      history_scope: elements.retrainHistoryScopeInput.value,
-      minimum_relative_improvement:
-        Number.parseFloat(elements.retrainImprovementThresholdInput.value || "3") / 100,
-      auto_activate: elements.retrainAutoActivateInput.checked,
-    },
   };
 }
 
 function setBusy(isBusy) {
   state.busy = isBusy;
-  for (const button of [elements.validateButton, elements.trainButton, elements.retrainButton, elements.monitorButton]) {
+  for (const button of actionButtons()) {
     button.disabled = isBusy || !state.datasetSummary;
   }
 }
@@ -161,14 +152,6 @@ function requireTrainingWorkflow() {
   return workflow;
 }
 
-function requireRetrainingWorkflow() {
-  const workflow = requireTrainingWorkflow();
-  if (!Number.isFinite(workflow.retrainingOptions.minimum_relative_improvement) || workflow.retrainingOptions.minimum_relative_improvement < 0) {
-    throw new Error("Минимальная выгода переобучения должна быть больше или равна 0.");
-  }
-  return workflow;
-}
-
 async function readJsonResponse(response) {
   const text = await response.text();
   if (!text) {
@@ -209,27 +192,19 @@ async function postForm(path, formData) {
   return payload;
 }
 
-function buildDatasetFormData({ projectId, datasetVersionId, trainingOptions = null, retrainingOptions = null }) {
+function buildTrainingFormData({ projectId, datasetVersionId, trainingOptions }) {
   const formData = new FormData();
   formData.append("project_id", projectId);
   formData.append("dataset_version_id", datasetVersionId);
-  if (trainingOptions) {
-    formData.append("task_type", trainingOptions.task_type);
-    formData.append("backend", trainingOptions.backend);
-    formData.append("preset", trainingOptions.preset);
-    formData.append("algos", trainingOptions.algos.join(","));
-    formData.append("timeout_seconds", String(trainingOptions.timeout_seconds));
-    formData.append("cpu_limit", String(trainingOptions.cpu_limit));
-    formData.append("test_size", String(trainingOptions.test_size));
-    formData.append("cv_folds", String(trainingOptions.cv_folds));
-    formData.append("enable_forecast", String(trainingOptions.enable_forecast));
-  }
-  if (retrainingOptions) {
-    formData.append("history_scope", retrainingOptions.history_scope);
-    formData.append("minimum_relative_improvement", String(retrainingOptions.minimum_relative_improvement));
-    formData.append("auto_activate", String(retrainingOptions.auto_activate));
-    formData.append("evaluation_fraction", "0.2");
-  }
+  formData.append("task_type", trainingOptions.task_type);
+  formData.append("backend", trainingOptions.backend);
+  formData.append("preset", trainingOptions.preset);
+  formData.append("algos", trainingOptions.algos.join(","));
+  formData.append("timeout_seconds", String(trainingOptions.timeout_seconds));
+  formData.append("cpu_limit", String(trainingOptions.cpu_limit));
+  formData.append("test_size", String(trainingOptions.test_size));
+  formData.append("cv_folds", String(trainingOptions.cv_folds));
+  formData.append("enable_forecast", String(trainingOptions.enable_forecast));
   return formData;
 }
 
@@ -247,28 +222,10 @@ function trainingStatusMessage(training) {
   return message;
 }
 
-function retrainingStatusMessage(retraining) {
-  const profit = retraining.evaluation?.profit ?? null;
-  let message =
-    `Переобучение завершено: кандидат=${retraining.candidate_model_version.version_id}, окно=${retraining.selection_summary.history_scope}.`;
-  if (profit) {
-    message += ` ${profit.primary_metric}: ${formatMetricValue(profit.current_value)} -> ${formatMetricValue(profit.candidate_value)} (${formatMetricValue(profit.relative_gain_percent)}% прироста).`;
-  }
-  if (retraining.mlflow?.run_id) {
-    message += ` MLflow run=${retraining.mlflow.run_id}.`;
-  }
-  if (retraining.activated) {
-    message += " Кандидат активирован.";
-  } else {
-    message += ` ${retraining.activation_reason}`;
-  }
-  return message;
-}
-
 function monitoringStatusMessage(monitoring) {
   const metrics = monitoring.metrics ?? {};
   let message =
-    `Мониторинг завершён: drifted=${formatMetricValue(metrics.drifted_columns_count ?? 0)} колонок, share=${formatMetricValue(metrics.drifted_columns_share ?? 0)}.`;
+    `Мониторинг завершен: drifted=${formatMetricValue(metrics.drifted_columns_count ?? 0)} колонок, share=${formatMetricValue(metrics.drifted_columns_share ?? 0)}.`;
   if (monitoring.mlflow?.run_id) {
     message += ` MLflow run=${monitoring.mlflow.run_id}.`;
   }
@@ -286,7 +243,7 @@ function syncTrainingControls() {
 
   elements.trainingOptionsNote.textContent = lightAutoMLSelected
     ? "Пресет, алгоритмы, CV и таймаут применяются только к LightAutoML."
-    : "Для sklearn используется локальный пайплайн на random forest. Пресет, алгоритмы, CV и таймаут игнорируются.";
+    : "Для sklearn используется локальный pipeline на random forest. Пресет, алгоритмы, CV и таймаут игнорируются.";
 }
 
 function preferredForecastSteps() {
@@ -296,48 +253,26 @@ function preferredForecastSteps() {
 function syncProjectNavigation(projectId) {
   const normalizedProjectId = projectId.trim();
   const datasetVersionId = elements.datasetVersionInput.value.trim();
+  const linkGroups = [
+    [elements.uploadLinks, "./upload.html"],
+    [elements.trainingLinks, "./training.html"],
+    [elements.retrainingLinks, "./retraining.html"],
+    [elements.modelsLinks, "./models.html"],
+    [elements.graphLinks, "./graph.html"],
+    [elements.dssLinks, "./dss.html"],
+  ];
 
-  for (const link of elements.uploadLinks) {
-    const targetUrl = new URL("./upload.html", window.location.href);
-    if (normalizedProjectId) {
-      targetUrl.searchParams.set("project_id", normalizedProjectId);
+  for (const [links, path] of linkGroups) {
+    for (const link of links) {
+      const targetUrl = new URL(path, window.location.href);
+      if (normalizedProjectId) {
+        targetUrl.searchParams.set("project_id", normalizedProjectId);
+      }
+      if (path === "./training.html" && datasetVersionId) {
+        targetUrl.searchParams.set("dataset_version_id", datasetVersionId);
+      }
+      link.href = targetUrl.toString();
     }
-    link.href = targetUrl.toString();
-  }
-
-  for (const link of elements.trainingLinks) {
-    const targetUrl = new URL("./training.html", window.location.href);
-    if (normalizedProjectId) {
-      targetUrl.searchParams.set("project_id", normalizedProjectId);
-    }
-    if (datasetVersionId) {
-      targetUrl.searchParams.set("dataset_version_id", datasetVersionId);
-    }
-    link.href = targetUrl.toString();
-  }
-
-  for (const link of elements.modelsLinks) {
-    const targetUrl = new URL("./models.html", window.location.href);
-    if (normalizedProjectId) {
-      targetUrl.searchParams.set("project_id", normalizedProjectId);
-    }
-    link.href = targetUrl.toString();
-  }
-
-  for (const link of elements.graphLinks) {
-    const targetUrl = new URL("./graph.html", window.location.href);
-    if (normalizedProjectId) {
-      targetUrl.searchParams.set("project_id", normalizedProjectId);
-    }
-    link.href = targetUrl.toString();
-  }
-
-  for (const link of elements.dssLinks) {
-    const targetUrl = new URL("./dss.html", window.location.href);
-    if (normalizedProjectId) {
-      targetUrl.searchParams.set("project_id", normalizedProjectId);
-    }
-    link.href = targetUrl.toString();
   }
 }
 
@@ -360,7 +295,7 @@ function applyDatasetSummary(summary) {
   elements.projectIdInput.value = summary.project_id;
   elements.targetInput.value = summary.target;
   elements.datasetSelectionNote.textContent =
-    `Подключён датасет ${summary.dataset_version.version_id} (${summary.source_name}, ${summary.rows} строк, ${summary.columns.length} колонок).`;
+    `Подключен датасет ${summary.dataset_version.version_id} (${summary.source_name}, ${summary.rows} строк, ${summary.columns.length} колонок).`;
   syncProjectNavigation(summary.project_id);
   setBusy(false);
 }
@@ -445,21 +380,13 @@ async function pollJob(jobId) {
       setJobStatus("done", `Задача ${job.job_id} завершена.`);
       const result = job.result || {};
       if (job.job_type === "training_dataset") {
-        state.training = result;
         setStatus("success", trainingStatusMessage(result));
         redirectToGraph(result.project_id, result.model_version.version_id, result.forecasting);
         return;
       }
-      if (job.job_type === "retraining_dataset") {
-        state.retraining = result;
-        setStatus("success", retrainingStatusMessage(result));
-        redirectToGraph(result.project_id, result.candidate_model_version.version_id, result.forecasting);
-        return;
-      }
       if (job.job_type === "monitoring_project") {
-        state.monitoring = result;
         setStatus("success", monitoringStatusMessage(result));
-        appendLog(`Отчёт drift: ${result.artifacts?.html_report || "—"}`);
+        appendLog(`Отчет drift: ${result.artifacts?.html_report || "—"}`);
         return;
       }
       setStatus("success", `Задача завершена: ${summarizeJob(job)}`);
@@ -492,13 +419,12 @@ async function enqueueAndPoll(actionLabel, path, formData) {
 
 async function handleValidate() {
   const workflow = requireDatasetWorkflow();
-  state.validation = state.datasetSummary;
-  setStatus("success", `Датасет готов: ${workflow.target}, ${state.validation.rows} строк.`);
+  setStatus("success", `Датасет готов: ${workflow.target}, ${state.datasetSummary.rows} строк.`);
 }
 
 async function handleTrain() {
   const workflow = requireTrainingWorkflow();
-  const formData = buildDatasetFormData({
+  const formData = buildTrainingFormData({
     projectId: workflow.projectId,
     datasetVersionId: workflow.datasetVersionId,
     trainingOptions: workflow.trainingOptions,
@@ -506,21 +432,6 @@ async function handleTrain() {
   await enqueueAndPoll(
     `Ставлю обучение в очередь для проекта "${workflow.projectId}" по датасету "${workflow.datasetVersionId}".`,
     "/jobs/training/dataset",
-    formData,
-  );
-}
-
-async function handleRetrain() {
-  const workflow = requireRetrainingWorkflow();
-  const formData = buildDatasetFormData({
-    projectId: workflow.projectId,
-    datasetVersionId: workflow.datasetVersionId,
-    trainingOptions: workflow.trainingOptions,
-    retrainingOptions: workflow.retrainingOptions,
-  });
-  await enqueueAndPoll(
-    `Ставлю переобучение в очередь для проекта "${workflow.projectId}" по датасету "${workflow.datasetVersionId}".`,
-    "/jobs/retraining/dataset",
     formData,
   );
 }
@@ -574,16 +485,6 @@ elements.trainButton.addEventListener("click", async () => {
   }
 });
 
-elements.retrainButton.addEventListener("click", async () => {
-  try {
-    await handleRetrain();
-  } catch (error) {
-    setBusy(false);
-    setStatus("error", normalizeError(error));
-    appendLog(normalizeError(error), "error");
-  }
-});
-
 elements.monitorButton.addEventListener("click", async () => {
   try {
     await handleMonitoring();
@@ -613,15 +514,15 @@ async function initializePage() {
     const summary = await resolveDatasetSummary(pageContext);
     applyDatasetSummary(summary);
     setJobStatus("idle", `Проект ${summary.project_id} готов к запуску задач.`);
-    setStatus("success", `Подключён датасет ${summary.dataset_version.version_id}: ${summary.rows} строк, target=${summary.target}.`);
-    appendLog(`Датасет ${summary.dataset_version.version_id} подключён к странице обучения.`);
+    setStatus("success", `Подключен датасет ${summary.dataset_version.version_id}: ${summary.rows} строк, target=${summary.target}.`);
+    appendLog(`Датасет ${summary.dataset_version.version_id} подключен к странице обучения.`);
     await restoreActiveJob(summary.project_id);
   } catch (error) {
     clearDatasetSummary("Сначала загрузите датасет на странице «Данные», затем вернитесь к обучению.");
     setJobStatus("failed", "Не удалось загрузить контекст страницы обучения.");
     setStatus("error", normalizeError(error));
     appendLog(normalizeError(error), "error");
-    for (const button of [elements.validateButton, elements.trainButton, elements.retrainButton, elements.monitorButton]) {
+    for (const button of actionButtons()) {
       button.disabled = true;
     }
   }

@@ -61,6 +61,10 @@ services:
 
   training-worker:
     image: adaptiveml-dss-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    pull_policy: never
     working_dir: /app
     volumes:
       - ./:/app
@@ -81,6 +85,10 @@ services:
 
   retraining-worker:
     image: adaptiveml-dss-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    pull_policy: never
     working_dir: /app
     volumes:
       - ./:/app
@@ -101,6 +109,10 @@ services:
 
   monitoring-worker:
     image: adaptiveml-dss-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    pull_policy: never
     working_dir: /app
     volumes:
       - ./:/app

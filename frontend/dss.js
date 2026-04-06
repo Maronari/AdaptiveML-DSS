@@ -48,6 +48,7 @@ const elements = {
   rulesEditor: document.getElementById("dss-rules-editor"),
   uploadLinks: Array.from(document.querySelectorAll("[data-nav-upload]")),
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
+  retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
@@ -301,6 +302,7 @@ function syncNavigation(projectId) {
   const targets = [
     [elements.uploadLinks, "./upload.html"],
     [elements.trainingLinks, "./training.html"],
+    [elements.retrainingLinks, "./retraining.html"],
     [elements.modelsLinks, "./models.html"],
     [elements.graphLinks, "./graph.html"],
     [elements.dssLinks, "./dss.html"],
