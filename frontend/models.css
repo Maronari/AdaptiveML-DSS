@@ -1,49 +1,49 @@
 .models-shell {
     display: grid;
     grid-template-rows: auto auto;
-    gap: 28px;
+    gap: 16px;
 }
 
 .models-page .models-board {
-    padding: 40px;
+    padding: 20px;
 }
 
 .models-page .models-panel {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 24px;
-    padding: 30px;
+    gap: 14px;
+    padding: 18px;
 }
 
 .models-page .models-panel-head {
     display: grid;
-    gap: 20px;
+    gap: 12px;
 }
 
 .models-page .models-summary-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
+    gap: 10px;
 }
 
 .models-page .models-summary-card {
     display: grid;
-    gap: 8px;
-    padding: 18px 20px;
+    gap: 4px;
+    padding: 10px 14px;
     border: 2px solid #E5E7EB;
-    border-radius: 14px;
+    border-radius: 12px;
     background: #F8F9FA;
 }
 
 .models-page .models-summary-label {
     color: #6B7280;
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: 11.5px;
+    line-height: 1.3;
 }
 
 .models-page .models-summary-card strong {
     color: #2C3E50;
-    font-size: 18px;
+    font-size: 15px;
     line-height: 1.2;
 }
 
@@ -89,13 +89,15 @@
     background: #f3f4f6;
 }
 
-.models-page .model-metric {
+.models-page .model-metric,
+.models-page .model-name-cell {
     display: grid;
     gap: 4px;
 }
 
 .models-page .model-metric small,
-.models-page .model-dataset-note {
+.models-page .model-dataset-note,
+.models-page .model-version-note {
     color: #6B7280;
     font-size: 12px;
     line-height: 1.4;
@@ -108,23 +110,23 @@
 }
 
 .models-page .model-actions .button {
-    min-height: 40px;
-    padding: 10px 16px;
+    min-height: 34px;
+    padding: 8px 14px;
 }
 
 .models-page .model-metrics-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(68px, 1fr));
-    gap: 8px;
-    min-width: 320px;
+    grid-template-columns: repeat(4, minmax(60px, 1fr));
+    gap: 6px;
+    min-width: 300px;
 }
 
 .models-page .metric-chip {
     display: grid;
-    gap: 4px;
-    padding: 10px 12px;
+    gap: 2px;
+    padding: 6px 8px;
     border: 1px solid #E5E7EB;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #F8F9FA;
 }
 

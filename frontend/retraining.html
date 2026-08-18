@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Дообучение модели</title>
-    <link rel="stylesheet" href="./styles.css?v=20260328-1130" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260328-1130" />
+    <link rel="stylesheet" href="./styles.css?v=20260816-1400" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260816-1400" />
   </head>
   <body class="training-page retraining-page">
     <main class="page-shell training-shell">
@@ -20,6 +20,7 @@
           <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
           <a href="./retraining.html" class="button button-primary" data-nav-retraining>Дообучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./report.html" class="button button-secondary" data-nav-report>Отчёт</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
           <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
         </div>
@@ -65,6 +66,11 @@
                     <option value="lightautoml">LightAutoML</option>
                     <option value="sklearn">Резервный sklearn</option>
                   </select>
+                </label>
+
+                <label class="field field-span-1">
+                  <span>Название кандидата (необязательно)</span>
+                  <input id="retraining-model-name" type="text" maxlength="120" placeholder="Например: Кандидат на май 2026" />
                 </label>
               </form>
 
@@ -189,6 +195,6 @@
       </section>
     </main>
 
-    <script type="module" src="./retraining.js?v=20260328-1130"></script>
+    <script type="module" src="./retraining.js?v=20260816-1500"></script>
   </body>
 </html>

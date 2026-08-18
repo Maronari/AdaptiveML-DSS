@@ -1,4 +1,3 @@
-const DEFAULT_PROJECT_ID = "demo";
 const DEFAULT_INTERVAL_MINUTES = 120;
 const MIN_INTERVAL_MINUTES = 10;
 const MAX_INTERVAL_MINUTES = 1440;
@@ -7,7 +6,7 @@ const DEFAULT_POINT_COUNT = 12;
 const MAX_TOTAL_POINTS = 720;
 
 const state = {
-  projectId: DEFAULT_PROJECT_ID,
+  projectId: "",
   requestedVersionId: "",
   datasetSummary: null,
   modelSummary: null,
@@ -50,6 +49,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
@@ -59,7 +59,7 @@ function getPageContext() {
   const requestedInterval = Number.parseInt(searchParams.get("interval_minutes") || searchParams.get("horizon_minutes") || "", 10);
   const requestedPointCount = Number.parseInt(searchParams.get("point_count") || searchParams.get("steps") || "", 10);
   return {
-    projectId: searchParams.get("project_id")?.trim() || DEFAULT_PROJECT_ID,
+    projectId: searchParams.get("project_id")?.trim() || "",
     versionId: searchParams.get("model_version")?.trim() || "",
     intervalMinutes: Number.isFinite(requestedInterval) && requestedInterval > 0 ? requestedInterval : null,
     pointCount: Number.isFinite(requestedPointCount) && requestedPointCount > 0 ? requestedPointCount : null,
@@ -205,6 +205,21 @@ async function fetchJson(path, options = undefined) {
   return payload;
 }
 
+async function resolveDefaultProjectId() {
+  try {
+    const payload = await fetchJson("/projects");
+    const projects = Array.isArray(payload.items) ? payload.items : [];
+    return (
+      projects.find((project) => project.has_champion_model)?.project_id ||
+      projects.find((project) => project.has_models)?.project_id ||
+      projects[0]?.project_id ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 async function putJson(path, payload) {
   const response = await fetch(path, {
     method: "PUT",
@@ -304,9 +319,12 @@ function syncNavigation(projectId) {
     [elements.trainingLinks, "./training.html"],
     [elements.retrainingLinks, "./retraining.html"],
     [elements.modelsLinks, "./models.html"],
+    [elements.reportLinks, "./report.html"],
     [elements.graphLinks, "./graph.html"],
     [elements.dssLinks, "./dss.html"],
   ];
+
+  const versionedPaths = new Set(["./graph.html", "./dss.html", "./report.html"]);
 
   targets.forEach(([links, relativePath]) => {
     for (const link of links) {
@@ -314,7 +332,7 @@ function syncNavigation(projectId) {
       if (projectId) {
         targetUrl.searchParams.set("project_id", projectId);
       }
-      if ((relativePath === "./graph.html" || relativePath === "./dss.html") && state.modelSummary?.version_id) {
+      if (versionedPaths.has(relativePath) && state.modelSummary?.version_id) {
         targetUrl.searchParams.set("model_version", state.modelSummary.version_id);
       }
       if ((relativePath === "./graph.html" || relativePath === "./dss.html") && state.request) {
@@ -450,7 +468,11 @@ function renderPage() {
   elements.projectTitle.textContent = title;
   elements.projectId.textContent = state.projectId || "—";
   elements.datasetId.textContent = state.datasetSummary?.dataset_version?.version_id || "—";
-  elements.modelId.textContent = state.modelSummary?.version_id || "—";
+  elements.modelId.textContent = state.modelSummary
+    ? state.modelSummary.name
+      ? `${state.modelSummary.name} (${state.modelSummary.version_id})`
+      : state.modelSummary.version_id
+    : "—";
   elements.target.textContent = state.datasetSummary?.target || state.modelSummary?.target || "—";
   syncRequestInputs();
 
@@ -522,6 +544,20 @@ async function loadContext() {
   syncNavigation(state.projectId);
   state.error = null;
   state.recommendations = [];
+
+  if (!state.projectId && !state.requestedVersionId) {
+    state.projectId = await resolveDefaultProjectId();
+    syncNavigation(state.projectId);
+  }
+
+  if (!state.projectId && !state.requestedVersionId) {
+    state.datasetSummary = null;
+    state.modelSummary = null;
+    state.error = "В реестре пока нет проектов. Создайте проект на стартовой странице.";
+    setStatus("error", state.error);
+    renderPage();
+    return;
+  }
 
   try {
     const modelSummary = state.requestedVersionId
@@ -598,6 +634,7 @@ async function refreshForecastPreview() {
     return;
   }
 
+  readRequestedForecastSettings();
   state.busy = true;
   state.error = null;
   renderPage();
@@ -628,6 +665,7 @@ async function runDecision() {
     return;
   }
 
+  readRequestedForecastSettings();
   state.busy = true;
   state.error = null;
   renderPage();
@@ -664,6 +702,14 @@ async function runDecision() {
     renderPage();
   }
 }
+
+elements.horizonInput.addEventListener("change", () => {
+  readRequestedForecastSettings();
+});
+
+elements.stepsInput.addEventListener("change", () => {
+  readRequestedForecastSettings();
+});
 
 elements.previewButton.addEventListener("click", () => {
   refreshForecastPreview();

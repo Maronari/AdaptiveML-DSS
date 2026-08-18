@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdaptiveML DSS - Отчёт по модели</title>
+    <link rel="stylesheet" href="./styles.css?v=20260816-1400" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260816-1400" />
+    <link rel="stylesheet" href="./report.css?v=20260816-1400" />
+  </head>
+  <body class="training-page report-page">
+    <main class="page-shell report-shell">
+      <header class="app-header">
+        <div class="app-header-copy">
+          <h1>AutoML</h1>
+          <p class="page-subtitle">Отчёт по обученной модели: название, метрики, гиперпараметры</p>
+        </div>
+        <div class="page-actions">
+          <a href="./index.html" class="button button-secondary">Проекты</a>
+          <a href="./upload.html" class="button button-secondary" data-nav-upload>Данные</a>
+          <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
+          <a href="./retraining.html" class="button button-secondary" data-nav-retraining>Дообучение</a>
+          <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./report.html" class="button button-primary" data-nav-report>Отчёт</a>
+          <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
+          <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
+        </div>
+      </header>
+
+      <section class="workspace-board workspace-board-single report-board">
+        <section class="panel report-panel">
+          <div class="report-panel-head">
+            <div class="panel-heading">
+              <p class="eyebrow">Проект</p>
+              <h2 id="report-project-title">Отчёт по модели</h2>
+              <p id="report-project-note" class="field-note">
+                Выберите проект и версию модели, чтобы собрать отчёт: название модели, её описание,
+                критерии качества и гиперпараметры обучения.
+              </p>
+            </div>
+
+            <div class="report-controls">
+              <label class="report-field">
+                <span>Проект</span>
+                <select id="report-project-select"></select>
+              </label>
+              <label class="report-field">
+                <span>Версия модели</span>
+                <select id="report-version-select"></select>
+              </label>
+              <a id="report-models-link" href="./models.html" class="button button-secondary">Все версии проекта</a>
+            </div>
+
+            <div class="report-summary-grid">
+              <article class="report-summary-card">
+                <span class="report-summary-label">Версия</span>
+                <strong id="report-summary-version">—</strong>
+              </article>
+              <article class="report-summary-card">
+                <span class="report-summary-label">Статус</span>
+                <strong id="report-summary-status">—</strong>
+              </article>
+              <article class="report-summary-card">
+                <span class="report-summary-label">Задача / Target</span>
+                <strong id="report-summary-task">—</strong>
+              </article>
+              <article class="report-summary-card">
+                <span class="report-summary-label">Обучена</span>
+                <strong id="report-summary-created">—</strong>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel report-description" id="report-description-panel">
+            <h3>Описание модели</h3>
+            <div id="report-description-body">
+              <p class="field-note">Данные появятся после выбора проекта и версии модели.</p>
+            </div>
+          </div>
+
+          <div class="report-columns">
+            <div class="panel">
+              <h3>Критерии качества модели</h3>
+              <div class="table-shell report-table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Критерий качества</th>
+                      <th>Обозначение</th>
+                      <th>Значение</th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-metrics-body"></tbody>
+                </table>
+                <div id="report-metrics-empty" class="table-placeholder">Метрики пока недоступны.</div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Гиперпараметры обучения</h3>
+              <div class="table-shell report-table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Гиперпараметр</th>
+                      <th>Значение</th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-hyperparameters-body"></tbody>
+                </table>
+                <div id="report-hyperparameters-empty" class="table-placeholder">Гиперпараметры пока недоступны.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel report-history">
+            <h3>Динамика качества модели по проекту</h3>
+            <p id="report-history-summary" class="field-note">
+              Данные появятся после выбора проекта.
+            </p>
+            <div id="report-history-chart" class="report-history-chart"></div>
+            <div class="table-shell report-table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Версия</th>
+                    <th>Дата обучения</th>
+                    <th>Статус</th>
+                    <th>Метрика</th>
+                    <th>Изменение</th>
+                  </tr>
+                </thead>
+                <tbody id="report-history-body"></tbody>
+              </table>
+              <div id="report-history-empty" class="table-placeholder">
+                У проекта пока только одна версия модели — динамику показывать не по чему.
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./report.js?v=20260816-1500"></script>
+  </body>
+</html>

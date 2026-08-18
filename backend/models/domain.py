@@ -13,6 +13,7 @@ class DatasetVersion:
     schema: dict[str, str]
     rows: int
     created_at: str
+    name: str | None = None
     storage_backend: str = "filesystem"
     bucket: str | None = None
     object_key: str | None = None
@@ -48,6 +49,7 @@ class ModelVersion:
     status: str
     feature_names: list[str]
     created_at: str
+    name: str | None = None
     storage_backend: str = "filesystem"
     bucket: str | None = None
     object_key: str | None = None

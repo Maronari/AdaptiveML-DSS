@@ -351,6 +351,7 @@ class PredictionService:
         forecasting = bundle.get("forecasting") or {}
         return {
             "version_id": model["version_id"],
+            "name": model.get("name"),
             "project_id": model["project_id"],
             "dataset_version_id": model["dataset_version_id"],
             "task_type": model["task_type"],

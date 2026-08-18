@@ -25,6 +25,7 @@ class TrainingService:
         records: list[dict[str, Any]],
         source_name: str = "inline",
         training_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Train a model from inline records and register the result."""
         frame = dataframe_from_records(records)
@@ -34,6 +35,7 @@ class TrainingService:
             frame=frame,
             source_name=source_name,
             training_options=training_options,
+            name=name,
         )
 
     async def train_from_upload(
@@ -42,6 +44,7 @@ class TrainingService:
         target: str,
         upload: UploadFile,
         training_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Train a model from an uploaded CSV or Excel file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
@@ -54,6 +57,7 @@ class TrainingService:
             records=records,
             source_name=source_name,
             training_options=training_options,
+            name=name,
         )
 
     def train_from_dataset_version(
@@ -61,6 +65,7 @@ class TrainingService:
         project_id: str,
         dataset_version_id: str,
         training_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Train a model from a dataset version that was uploaded earlier."""
         dataset_version = self.registry_service.get_dataset_version(dataset_version_id)
@@ -77,6 +82,7 @@ class TrainingService:
             source_name=dataset_version["source_name"],
             training_options=training_options,
             dataset_version=dataset_version,
+            name=name,
         )
 
     def _train_frame(
@@ -87,6 +93,7 @@ class TrainingService:
         source_name: str,
         training_options: dict[str, Any] | None = None,
         dataset_version: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Train on a prepared frame, optionally reusing an existing dataset version."""
         self.dataset_service._validate_training_frame(frame, target)
@@ -119,6 +126,7 @@ class TrainingService:
             bundle=training_result.bundle,
             holdout_predictions=training_result.holdout_predictions,
             training_artifacts=training_result.training_artifacts,
+            name=name,
         )
         forecasting_bundle = training_result.bundle.get("forecasting")
 

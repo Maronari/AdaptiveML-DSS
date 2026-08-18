@@ -23,6 +23,51 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+ALGO_LABELS = {
+    "lgb": "LightGBM (градиентный бустинг)",
+    "cb": "CatBoost (градиентный бустинг)",
+    "xgb": "XGBoost (градиентный бустинг)",
+    "rf": "Random Forest",
+    "linear_l2": "линейная модель (L2-регуляризация)",
+    "nn": "нейронная сеть",
+}
+
+BACKEND_LABELS = {
+    "lightautoml": "LightAutoML (LAMA)",
+    "sklearn-fallback": "scikit-learn (резервный режим)",
+}
+
+PRESET_LABELS = {
+    "tabular": "TabularAutoML",
+    "utilized": "TabularUtilizedAutoML",
+    "sklearn-random-forest": "RandomForest pipeline",
+}
+
+METRIC_LABELS = {
+    "r": "Коэффициент корреляции (r)",
+    "r2": "Коэффициент детерминации (R²)",
+    "mse": "MSE — среднеквадратичная ошибка",
+    "rmse": "RMSE — корень из среднеквадратичной ошибки",
+    "mae": "MAE — средняя абсолютная ошибка прогноза",
+    "aic": "Информационный критерий Акаике (AIC)",
+    "bic": "Байесовский информационный критерий (BIC)",
+    "aicc": "Скорректированный AIC (AICc)",
+    "accuracy": "Accuracy — доля верных предсказаний",
+    "f1_weighted": "F1-score (взвешенный по классам)",
+}
+
+HYPERPARAMETER_LABELS = {
+    "task_type": "Тип задачи",
+    "backend": "AutoML-бэкенд",
+    "preset": "Пресет",
+    "algos": "Алгоритмы",
+    "timeout_seconds": "Лимит времени обучения, с",
+    "cpu_limit": "Лимит CPU",
+    "test_size": "Доля holdout-выборки",
+    "cv_folds": "Число фолдов кросс-валидации",
+    "enable_forecast": "Прогнозирующая надстройка",
+}
+
 from backend.services.dataset_service import DatasetService
 from backend.services.explanation_service import ExplanationService
 from backend.services.prediction_service import PredictionService
@@ -82,6 +127,130 @@ def render_metric_cards(metrics: dict[str, Any]) -> str:
             )
         )
     return "".join(cards)
+
+
+def build_model_display_name(champion: dict[str, Any], bundle: dict[str, Any]) -> str:
+    """Build a human-readable model name from the backend, preset and algorithms used."""
+    artifacts = champion.get("training_artifacts") or {}
+    backend = artifacts.get("backend") or bundle.get("backend_name") or "unknown"
+    preset = artifacts.get("preset") or bundle.get("preset_name") or ""
+    effective_options = (artifacts.get("training_options") or {}).get("effective") or {}
+    algos = effective_options.get("algos") or []
+
+    backend_label = BACKEND_LABELS.get(backend, backend)
+    preset_label = PRESET_LABELS.get(preset, preset)
+    algo_labels = [ALGO_LABELS.get(algo, algo) for algo in algos]
+
+    if algo_labels and backend == "lightautoml":
+        return f"{backend_label} / {preset_label}: {', '.join(algo_labels)}"
+    return f"{backend_label} / {preset_label}" if preset_label else backend_label
+
+
+def render_model_description(
+    champion: dict[str, Any],
+    bundle: dict[str, Any],
+    dataset_record: dict[str, Any],
+    model_name: str,
+) -> str:
+    """Render a text block describing which model was trained and how."""
+    artifacts = champion.get("training_artifacts") or {}
+    backend = artifacts.get("backend") or bundle.get("backend_name") or "unknown"
+    task_type = champion.get("task_type", "")
+    target = champion.get("target", "")
+    feature_count = len(champion.get("feature_names") or [])
+
+    if backend == "lightautoml":
+        library_note = (
+            "Модель обучена библиотекой автоматизированного машинного обучения "
+            "LightAutoML (LAMA, Sber AI Lab): библиотека сама подбирает и комбинирует "
+            "перечисленные ниже алгоритмы по результатам кросс-валидации и строит "
+            "итоговый ансамбль (blending)."
+        )
+    else:
+        library_note = (
+            "LightAutoML была недоступна либо тренировка на ней завершилась ошибкой, "
+            "поэтому использован резервный конвейер на scikit-learn."
+        )
+
+    paragraphs = [
+        f"<p><strong>Модель:</strong> {html.escape(model_name)}</p>",
+        f"<p><strong>Версия:</strong> {html.escape(str(champion.get('version_id')))} "
+        f"(статус: {html.escape(str(champion.get('status')))})</p>",
+        f"<p><strong>Задача:</strong> {html.escape(task_type)}, "
+        f"целевая переменная — <code>{html.escape(target)}</code>, "
+        f"признаков использовано: {feature_count}.</p>",
+        f"<p><strong>Обучающие данные:</strong> версия датасета "
+        f"{html.escape(str(dataset_record.get('version_id')))} "
+        f"({html.escape(str(dataset_record.get('source_name')))}), "
+        f"строк: {html.escape(str(dataset_record.get('rows')))}.</p>",
+        f"<p>{library_note}</p>",
+    ]
+    return "".join(paragraphs)
+
+
+def render_metrics_table(metrics: dict[str, Any], primary_metric: str) -> str:
+    """Render a metrics table with human-readable labels for the report."""
+    rows = []
+    for key, value in metrics.items():
+        label = METRIC_LABELS.get(key, key)
+        is_primary = key == primary_metric
+        rows.append(
+            """
+            <tr{highlight}>
+              <td>{label}</td>
+              <td><code>{key}</code></td>
+              <td>{value}</td>
+            </tr>
+            """.format(
+                highlight=' class="primary-row"' if is_primary else "",
+                label=html.escape(label),
+                key=html.escape(key),
+                value=html.escape(str(value)),
+            )
+        )
+    body = "".join(rows) if rows else "<tr><td colspan=\"3\">Метрики недоступны.</td></tr>"
+    return f"""
+    <table class="metrics-table">
+      <thead>
+        <tr><th>Критерий качества</th><th>Обозначение</th><th>Значение</th></tr>
+      </thead>
+      <tbody>{body}</tbody>
+    </table>
+    """
+
+
+def render_hyperparameters_table(champion: dict[str, Any]) -> str:
+    """Render the effective training hyperparameters as a table."""
+    artifacts = champion.get("training_artifacts") or {}
+    training_options = artifacts.get("training_options") or {}
+    effective = training_options.get("effective") or {}
+
+    rows = []
+    for key, value in effective.items():
+        label = HYPERPARAMETER_LABELS.get(key, key)
+        if isinstance(value, list):
+            display_value = ", ".join(str(item) for item in value) or "—"
+        elif value is None:
+            display_value = "—"
+        else:
+            display_value = str(value)
+        rows.append(
+            """
+            <tr>
+              <td>{label}</td>
+              <td>{value}</td>
+            </tr>
+            """.format(label=html.escape(label), value=html.escape(display_value))
+        )
+    body = "".join(rows) if rows else "<tr><td colspan=\"2\">Гиперпараметры недоступны.</td></tr>"
+    return f"""
+    <table class="metrics-table">
+      <thead>
+        <tr><th>Гиперпараметр</th><th>Значение</th></tr>
+      </thead>
+      <tbody>{body}</tbody>
+    </table>
+    """
 
 
 def render_top_factors(items: list[dict[str, Any]]) -> str:
@@ -310,6 +479,11 @@ def main() -> int:
     prediction_chart = plot_predictions(sample_frame, predictions=predictions, target=target, task_type=task_type)
     explanation_chart = plot_first_explanation(explanations)
 
+    model_name = build_model_display_name(champion, bundle)
+    model_description = render_model_description(champion, bundle, dataset_record, model_name)
+    metrics_table = render_metrics_table(champion["metrics"], champion.get("primary_metric", ""))
+    hyperparameters_table = render_hyperparameters_table(champion)
+
     settings = get_settings()
     default_output = settings.artifacts_dir / args.project_id / "visual-report.html"
     output_path = Path(args.output).expanduser().resolve() if args.output else default_output.resolve()
@@ -431,16 +605,62 @@ def main() -> int:
             white-space: pre-wrap;
             word-break: break-word;
           }
+          .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+          }
+          .metrics-table th, .metrics-table td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--line);
+          }
+          .metrics-table th {
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: .06em;
+          }
+          .metrics-table tr.primary-row td {
+            font-weight: bold;
+            color: var(--accent);
+          }
+          .description p {
+            margin: 6px 0;
+          }
+          .description code {
+            background: rgba(15,118,110,.1);
+            padding: 1px 6px;
+            border-radius: 6px;
+          }
         </style>
       </head>
       <body>
         <div class="page">
           <section class="hero">
-            <h1>AdaptiveML DSS Visual Report</h1>
+            <h1>$model_name</h1>
             <p>project_id=$project_id</p>
             <p>model_version=$model_version | task_type=$task_type | backend=$backend</p>
             <p>dataset=$dataset_version | source=$source_name | rows=$rows</p>
             <div class="metrics">$metric_cards</div>
+          </section>
+
+          <section class="stack">
+            <div class="panel description">
+              <h2>Описание модели</h2>
+              $model_description
+            </div>
+          </section>
+
+          <section class="grid">
+            <div class="panel">
+              <h2>Критерии качества модели</h2>
+              $metrics_table
+            </div>
+            <div class="panel">
+              <h2>Гиперпараметры обучения</h2>
+              $hyperparameters_table
+            </div>
           </section>
 
           <section class="grid">
@@ -481,6 +701,7 @@ def main() -> int:
     </html>
     """).substitute(
         project_id=html.escape(args.project_id),
+        model_name=html.escape(model_name),
         model_version=html.escape(str(champion["version_id"])),
         task_type=html.escape(str(task_type)),
         backend=html.escape(str(bundle.get("backend_name", "unknown"))),
@@ -488,6 +709,9 @@ def main() -> int:
         source_name=html.escape(str(dataset_record["source_name"])),
         rows=html.escape(str(dataset_record["rows"])),
         metric_cards=render_metric_cards(champion["metrics"]),
+        model_description=model_description,
+        metrics_table=metrics_table,
+        hyperparameters_table=hyperparameters_table,
         target_distribution_chart=target_distribution_chart,
         feature_importance_chart=feature_importance_chart,
         prediction_chart=prediction_chart,

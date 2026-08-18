@@ -11,6 +11,7 @@ from backend.schemas.api import (
     ProjectCreateRequest,
     PredictionComparisonRequest,
     PredictionRequest,
+    RenameRequest,
     RetrainRequest,
     TrainRequest,
 )
@@ -158,6 +159,7 @@ async def register_dataset_file(
     file: UploadFile = File(...),
     target: str = Form(...),
     project_id: str = Form("default"),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Persist an uploaded dataset version after target confirmation."""
     try:
@@ -165,6 +167,7 @@ async def register_dataset_file(
             project_id=project_id,
             target=target,
             upload=file,
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -175,6 +178,7 @@ async def register_dataset_files(
     files: list[UploadFile] = File(...),
     target: str = Form(...),
     project_id: str = Form("default"),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Persist a dataset version assembled from several uploaded files."""
     try:
@@ -182,7 +186,17 @@ async def register_dataset_files(
             project_id=project_id,
             target=target,
             uploads=files,
+            name=name,
         )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.patch("/datasets/{version_id}", tags=["datasets"])
+def rename_dataset(version_id: str, payload: RenameRequest) -> dict[str, Any]:
+    """Rename an existing dataset version."""
+    try:
+        return registry_service.rename_dataset_version(version_id, payload.name)
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
@@ -222,6 +236,7 @@ def run_training(payload: TrainRequest) -> dict[str, Any]:
             records=payload.records,
             source_name=payload.source_name,
             training_options=payload.training_options.model_dump(),
+            name=payload.name,
         )
     except ValueError as exc:
         logger.warning("Training request failed: project_id=%s error=%s", payload.project_id, exc)
@@ -242,6 +257,7 @@ async def run_training_file(
     test_size: float = Form(0.2),
     cv_folds: int = Form(0),
     enable_forecast: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Train a model from an uploaded dataset file."""
     try:
@@ -266,6 +282,7 @@ async def run_training_file(
                 "cv_folds": cv_folds,
                 "enable_forecast": enable_forecast,
             },
+            name=name,
         )
         logger.info(
             "Training upload completed: project_id=%s model_version=%s backend=%s",
@@ -292,6 +309,7 @@ def run_training_dataset(
     test_size: float = Form(0.2),
     cv_folds: int = Form(0),
     enable_forecast: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Train a model from a previously saved dataset version."""
     try:
@@ -309,6 +327,7 @@ def run_training_dataset(
                 "cv_folds": cv_folds,
                 "enable_forecast": enable_forecast,
             },
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -327,6 +346,7 @@ def enqueue_training_dataset_job(
     test_size: float = Form(0.2),
     cv_folds: int = Form(0),
     enable_forecast: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Queue a background training job for one stored dataset version."""
     try:
@@ -344,6 +364,7 @@ def enqueue_training_dataset_job(
                 "cv_folds": cv_folds,
                 "enable_forecast": enable_forecast,
             },
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -360,6 +381,7 @@ def run_retraining(payload: RetrainRequest) -> dict[str, Any]:
             source_name=payload.source_name,
             training_options=payload.training_options.model_dump(),
             retraining_options=payload.retraining_options.model_dump(),
+            name=payload.name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -413,6 +435,7 @@ async def run_retraining_file(
     minimum_relative_improvement: float = Form(0.03),
     evaluation_fraction: float = Form(0.2),
     auto_activate: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Retrain a challenger model from an uploaded labeled dataset file."""
     try:
@@ -437,6 +460,7 @@ async def run_retraining_file(
                 "evaluation_fraction": evaluation_fraction,
                 "auto_activate": auto_activate,
             },
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -459,6 +483,7 @@ def run_retraining_dataset(
     minimum_relative_improvement: float = Form(0.03),
     evaluation_fraction: float = Form(0.2),
     auto_activate: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Retrain a challenger model from a previously saved dataset version."""
     try:
@@ -482,6 +507,7 @@ def run_retraining_dataset(
                 "evaluation_fraction": evaluation_fraction,
                 "auto_activate": auto_activate,
             },
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -504,6 +530,7 @@ def enqueue_retraining_dataset_job(
     minimum_relative_improvement: float = Form(0.03),
     evaluation_fraction: float = Form(0.2),
     auto_activate: bool = Form(True),
+    name: str | None = Form(None),
 ) -> dict[str, Any]:
     """Queue a background retraining job for one stored dataset version."""
     try:
@@ -527,6 +554,7 @@ def enqueue_retraining_dataset_job(
                 "evaluation_fraction": evaluation_fraction,
                 "auto_activate": auto_activate,
             },
+            name=name,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -660,6 +688,15 @@ def get_model(version_id: str) -> dict[str, Any]:
     """Return metadata for one stored model version."""
     try:
         return prediction_service.get_model_summary(version_id=version_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.patch("/models/{version_id}", tags=["models"])
+def rename_model(version_id: str, payload: RenameRequest) -> dict[str, Any]:
+    """Rename an existing model version."""
+    try:
+        return registry_service.rename_model_version(version_id, payload.name)
     except ValueError as exc:
         raise _bad_request(exc) from exc
 

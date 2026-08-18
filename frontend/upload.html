@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS - Загрузка данных</title>
-    <link rel="stylesheet" href="./styles.css?v=20260328-1245" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260328-1245" />
+    <link rel="stylesheet" href="./styles.css?v=20260816-1400" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260816-1400" />
   </head>
   <body class="training-page upload-page">
     <main class="page-shell training-shell">
@@ -20,6 +20,7 @@
           <a href="./training.html" class="button button-secondary" data-nav-training>Обучение</a>
           <a href="./retraining.html" class="button button-secondary" data-nav-retraining>Дообучение</a>
           <a href="./models.html" class="button button-secondary" data-nav-models>История моделей</a>
+          <a href="./report.html" class="button button-secondary" data-nav-report>Отчёт</a>
           <a href="./graph.html" class="button button-secondary" data-nav-graph>График</a>
           <a href="./dss.html" class="button button-secondary" data-nav-dss>СППР</a>
         </div>
@@ -51,6 +52,11 @@
                   <select id="target-column" name="target">
                     <option value=""></option>
                   </select>
+                </label>
+
+                <label class="field field-span-2">
+                  <span>Название датасета (необязательно)</span>
+                  <input id="dataset-name" name="dataset_name" type="text" maxlength="120" placeholder="Например: Энергопотребление, апрель 2026" />
                 </label>
               </form>
 
@@ -135,6 +141,6 @@
       </section>
     </main>
 
-    <script type="module" src="./upload.js?v=20260328-1245"></script>
+    <script type="module" src="./upload.js?v=20260816-1500"></script>
   </body>
 </html>

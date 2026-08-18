@@ -30,6 +30,7 @@ class RegistryService:
         source_name: str,
         target: str,
         frame: pd.DataFrame,
+        name: str | None = None,
     ) -> DatasetVersion:
         """Persist a new dataset snapshot and register its metadata."""
         self._ensure_project_record(project_id)
@@ -49,6 +50,7 @@ class RegistryService:
             schema={column: str(dtype) for column, dtype in frame.dtypes.items()},
             rows=int(len(frame)),
             created_at=self._now(),
+            name=self._clean_name(name),
             storage_backend=storage_ref.storage_backend,
             bucket=storage_ref.bucket,
             object_key=storage_ref.object_key,
@@ -57,6 +59,24 @@ class RegistryService:
         datasets.append(record.to_dict())
         self.registry.write("datasets", datasets)
         return record
+
+    def rename_dataset_version(self, version_id: str, name: str) -> dict[str, Any]:
+        """Update the display name of an existing dataset version."""
+        datasets = self.registry.read("datasets")
+        for dataset in datasets:
+            if dataset["version_id"] == version_id:
+                dataset["name"] = self._clean_name(name)
+                self.registry.write("datasets", datasets)
+                return dataset
+        raise ValueError(f"Dataset version '{version_id}' was not found.")
+
+    @staticmethod
+    def _clean_name(name: str | None) -> str | None:
+        """Normalize a user-supplied display name, treating blanks as unset."""
+        if name is None:
+            return None
+        cleaned = " ".join(name.split())
+        return cleaned or None
 
     def load_dataset_version_frame(self, version_id: str) -> pd.DataFrame:
         """Load the persisted frame for a dataset version id."""
@@ -92,6 +112,7 @@ class RegistryService:
         holdout_predictions: list[dict[str, Any]] | None = None,
         training_artifacts: dict[str, Any] | None = None,
         promotion_mode: str = "auto",
+        name: str | None = None,
     ) -> ModelVersion:
         """Persist a trained model bundle and update champion status."""
         if promotion_mode not in {"auto", "candidate"}:
@@ -128,6 +149,7 @@ class RegistryService:
             status=status,
             feature_names=feature_names,
             created_at=self._now(),
+            name=self._clean_name(name),
             storage_backend=storage_ref.storage_backend,
             bucket=storage_ref.bucket,
             object_key=storage_ref.object_key,
@@ -137,6 +159,16 @@ class RegistryService:
         models.append(record.to_dict())
         self.registry.write("models", models)
         return record
+
+    def rename_model_version(self, version_id: str, name: str) -> dict[str, Any]:
+        """Update the display name of an existing model version."""
+        models = self.registry.read("models")
+        for model in models:
+            if model["version_id"] == version_id:
+                model["name"] = self._clean_name(name)
+                self.registry.write("models", models)
+                return model
+        raise ValueError(f"Model version '{version_id}' was not found.")
 
     def get_champion_bundle(self, project_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """Load the current champion model metadata and serialized bundle."""

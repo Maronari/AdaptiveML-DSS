@@ -30,6 +30,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
@@ -151,6 +152,24 @@ async function postJson(path) {
   return payload;
 }
 
+async function patchJson(path, body) {
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(payload, response));
+  }
+
+  return payload;
+}
+
 function syncNavigation(projectId, versionId = "") {
   const normalizedProjectId = projectId.trim();
 
@@ -186,6 +205,17 @@ function syncNavigation(projectId, versionId = "") {
     link.href = targetUrl.toString();
   }
 
+  for (const link of elements.reportLinks) {
+    const targetUrl = new URL("./report.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    if (versionId) {
+      targetUrl.searchParams.set("model_version", versionId);
+    }
+    link.href = targetUrl.toString();
+  }
+
   for (const link of elements.graphLinks) {
     const targetUrl = new URL("./graph.html", window.location.href);
     if (normalizedProjectId) {
@@ -211,6 +241,13 @@ function syncNavigation(projectId, versionId = "") {
 
 function graphUrl(projectId, versionId) {
   const targetUrl = new URL("./graph.html", window.location.href);
+  targetUrl.searchParams.set("project_id", projectId);
+  targetUrl.searchParams.set("model_version", versionId);
+  return targetUrl.toString();
+}
+
+function reportUrl(projectId, versionId) {
+  const targetUrl = new URL("./report.html", window.location.href);
   targetUrl.searchParams.set("project_id", projectId);
   targetUrl.searchParams.set("model_version", versionId);
   return targetUrl.toString();
@@ -246,7 +283,12 @@ function renderTable() {
     const statusLabel = item.is_champion ? "Champion" : item.is_latest ? "Latest" : item.status;
 
     row.innerHTML = `
-      <td><strong>${escapeHtml(item.version_id)}</strong></td>
+      <td>
+        <div class="model-name-cell">
+          <strong>${escapeHtml(item.name || item.version_id)}</strong>
+          ${item.name ? `<small class="model-version-note">${escapeHtml(item.version_id)}</small>` : ""}
+        </div>
+      </td>
       <td><span class="model-status ${escapeHtml(effectiveStatus)}">${escapeHtml(statusLabel)}</span></td>
       <td>${formatDateTime(item.created_at)}</td>
       <td>${escapeHtml(item.task_type || "—")}</td>
@@ -260,7 +302,9 @@ function renderTable() {
       </td>
       <td>
         <div class="model-actions">
+          <a href="${reportUrl(state.projectId, item.version_id)}" class="button button-secondary">Отчёт</a>
           <a href="${graphUrl(state.projectId, item.version_id)}" class="button button-secondary">График</a>
+          <button type="button" class="button button-secondary" data-action="rename-model" data-version-id="${escapeHtml(item.version_id)}" data-current-name="${escapeHtml(item.name || "")}">Переименовать</button>
           ${
             item.is_champion
               ? '<button type="button" class="button button-primary" disabled>Активна</button>'
@@ -352,6 +396,25 @@ async function activateModel(versionId) {
   }
 }
 
+async function renameModel(versionId, currentName) {
+  const nextName = window.prompt("Название модели:", currentName || "");
+  if (nextName === null) {
+    return;
+  }
+  const trimmed = nextName.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  try {
+    await patchJson(`/models/${encodeURIComponent(versionId)}`, { name: trimmed });
+    await loadModelHistory();
+  } catch (error) {
+    state.error = error instanceof Error ? error.message : String(error);
+    renderPage();
+  }
+}
+
 elements.tableBody.addEventListener("click", (event) => {
   const target = event.target instanceof HTMLElement ? event.target.closest("[data-action]") : null;
   if (!target) {
@@ -360,6 +423,10 @@ elements.tableBody.addEventListener("click", (event) => {
 
   if (target.dataset.action === "activate-model" && target.dataset.versionId) {
     activateModel(target.dataset.versionId);
+  }
+
+  if (target.dataset.action === "rename-model" && target.dataset.versionId) {
+    renameModel(target.dataset.versionId, target.dataset.currentName || "");
   }
 });
 

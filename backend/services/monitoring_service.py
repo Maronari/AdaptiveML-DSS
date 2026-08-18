@@ -69,12 +69,16 @@ class MonitoringService:
             },
         }
 
-        result["mlflow"] = self.observability_service.log_monitoring_run(
-            project_id=project_id,
-            job_id=job_id,
-            payload=result,
-            artifact_dir=artifact_dir,
-        )
+        try:
+            result["mlflow"] = self.observability_service.log_monitoring_run(
+                project_id=project_id,
+                job_id=job_id,
+                payload=result,
+                artifact_dir=artifact_dir,
+            )
+        except Exception as exc:
+            result["mlflow"] = None
+            result["mlflow_error"] = str(exc)
         return result
 
     @staticmethod

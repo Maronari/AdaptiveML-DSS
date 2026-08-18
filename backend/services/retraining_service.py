@@ -199,6 +199,7 @@ class RetrainingService:
         source_name: str = "inline",
         training_options: dict[str, Any] | None = None,
         retraining_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Train a challenger model on historical+new data and compare it with the current champion."""
         current_model, current_bundle = self.registry_service.get_champion_bundle(project_id)
@@ -250,6 +251,7 @@ class RetrainingService:
             holdout_predictions=training_result.holdout_predictions,
             training_artifacts=training_result.training_artifacts,
             promotion_mode="candidate",
+            name=name,
         )
 
         current_eval_metrics = self._evaluate_bundle(
@@ -325,6 +327,7 @@ class RetrainingService:
         upload: UploadFile,
         training_options: dict[str, Any] | None = None,
         retraining_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Retrain from an uploaded labeled file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
@@ -338,6 +341,7 @@ class RetrainingService:
             source_name=source_name,
             training_options=training_options,
             retraining_options=retraining_options,
+            name=name,
         )
 
     def retrain_from_dataset_version(
@@ -346,6 +350,7 @@ class RetrainingService:
         dataset_version_id: str,
         training_options: dict[str, Any] | None = None,
         retraining_options: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Retrain a challenger model from a stored labeled dataset version."""
         dataset_version = self.registry_service.get_dataset_version(dataset_version_id)
@@ -363,6 +368,7 @@ class RetrainingService:
             source_name=dataset_version["source_name"],
             training_options=training_options,
             retraining_options=retraining_options,
+            name=name,
         )
 
     def _build_candidate_and_evaluation_frames(

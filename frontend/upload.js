@@ -12,6 +12,7 @@ const state = {
 const elements = {
   fileInput: document.getElementById("dataset-file"),
   targetSelect: document.getElementById("target-column"),
+  datasetNameInput: document.getElementById("dataset-name"),
   continueButton: document.getElementById("continue-button"),
   summaryRows: document.getElementById("summary-rows"),
   summaryColumns: document.getElementById("summary-columns"),
@@ -29,6 +30,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
@@ -92,7 +94,7 @@ async function fetchJson(path) {
   return payload;
 }
 
-async function postUploads(path, { files, projectId, target = "" }) {
+async function postUploads(path, { files, projectId, target = "", name = "" }) {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append(files.length > 1 ? "files" : "file", file);
@@ -100,6 +102,9 @@ async function postUploads(path, { files, projectId, target = "" }) {
   formData.append("project_id", projectId);
   if (target) {
     formData.append("target", target);
+  }
+  if (name) {
+    formData.append("name", name);
   }
 
   const response = await fetch(path, {
@@ -147,6 +152,14 @@ function syncNavigation(projectId) {
 
   for (const link of elements.modelsLinks) {
     const targetUrl = new URL("./models.html", window.location.href);
+    if (normalizedProjectId) {
+      targetUrl.searchParams.set("project_id", normalizedProjectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.reportLinks) {
+    const targetUrl = new URL("./report.html", window.location.href);
     if (normalizedProjectId) {
       targetUrl.searchParams.set("project_id", normalizedProjectId);
     }
@@ -911,12 +924,15 @@ async function handleInspect() {
 async function handleContinue() {
   const files = requireFiles();
   const target = requireSelectedTarget();
+  const name = elements.datasetNameInput.value.trim();
   const payload = await postUploads(files.length > 1 ? "/datasets/register/files" : "/datasets/register/file", {
     files,
     projectId: state.projectId,
     target,
+    name,
   });
-  setStatus("success", `Датасет сохранён: ${payload.dataset_version.version_id}.`);
+  const label = payload.dataset_version.name || payload.dataset_version.version_id;
+  setStatus("success", `Датасет сохранён: ${label}.`);
   window.location.assign(trainingUrl(state.projectId, payload.dataset_version.version_id));
 }
 

@@ -1,4 +1,3 @@
-const DEFAULT_PROJECT_ID = "demo";
 const DEFAULT_CHART_HEIGHT = 520;
 const DEFAULT_INTERVAL_MINUTES = 120;
 const MIN_INTERVAL_MINUTES = 10;
@@ -73,6 +72,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
@@ -101,7 +101,7 @@ function getRequestedContext() {
   }
 
   return {
-    projectId: searchParams.get("project_id")?.trim() || DEFAULT_PROJECT_ID,
+    projectId: searchParams.get("project_id")?.trim() || "",
     versionId: searchParams.get("model_version")?.trim() || "",
     intervalMinutes,
     pointCount: Number.isFinite(requestedPointCount) && requestedPointCount > 0 ? requestedPointCount : null,
@@ -253,7 +253,9 @@ function updateSelectedModelSummary() {
     return;
   }
 
-  elements.selectedModelVersion.textContent = state.model.version_id || "—";
+  elements.selectedModelVersion.textContent = state.model.name
+    ? `${state.model.name} (${state.model.version_id})`
+    : state.model.version_id || "—";
   elements.selectedModelStatus.textContent = state.model.status || "—";
   elements.selectedModelTarget.textContent = state.model.target || "—";
   elements.selectedModelMetric.textContent = formatPrimaryMetric(state.model);
@@ -493,6 +495,17 @@ function syncNavigation(projectId) {
     const targetUrl = new URL("./models.html", window.location.href);
     if (projectId) {
       targetUrl.searchParams.set("project_id", projectId);
+    }
+    link.href = targetUrl.toString();
+  }
+
+  for (const link of elements.reportLinks) {
+    const targetUrl = new URL("./report.html", window.location.href);
+    if (projectId) {
+      targetUrl.searchParams.set("project_id", projectId);
+    }
+    if (state.model?.version_id) {
+      targetUrl.searchParams.set("model_version", state.model.version_id);
     }
     link.href = targetUrl.toString();
   }
@@ -820,6 +833,21 @@ async function fetchJson(url) {
   }
 
   return payload;
+}
+
+async function resolveDefaultProjectId() {
+  try {
+    const payload = await fetchJson("/projects");
+    const projects = Array.isArray(payload.items) ? payload.items : [];
+    return (
+      projects.find((project) => project.has_champion_model)?.project_id ||
+      projects.find((project) => project.has_models)?.project_id ||
+      projects[0]?.project_id ||
+      ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 function setInteractiveState() {
@@ -1251,7 +1279,8 @@ function drawForecastChart() {
   context.fillText(zoomText, bounds.right - context.measureText(zoomText).width, bounds.top - 16);
 
   const zoomEnabled = timelineRows.length > MIN_VISIBLE_POINTS;
-  const baseText = `Проект ${state.model.project_id}, версия ${state.model.version_id}, цель ${state.model.target}.`;
+  const modelLabel = state.model.name ? `${state.model.name} (${state.model.version_id})` : state.model.version_id;
+  const baseText = `Проект ${state.model.project_id}, версия ${modelLabel}, цель ${state.model.target}.`;
   const rangeText =
     ` Интервал ${formatDuration(state.request.totalMinutes)}, точек ${state.request.pointCount}, ` +
     `шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг ${formatDuration(state.request.baseFrequencyMinutes)}.`;
@@ -1262,7 +1291,7 @@ function drawForecastChart() {
     ? " Колесо мыши масштабирует график, перетаскивание двигает окно влево и вправо, наведение показывает значение точки."
     : " Наведите на точку, чтобы увидеть значение.";
 
-  elements.chartTitle.textContent = `Прогноз модели ${state.model.version_id}`;
+  elements.chartTitle.textContent = `Прогноз модели ${modelLabel}`;
   updateChartControls(
     `${baseText}${rangeText}${modelText}${interactionText}`,
     zoomEnabled && !isViewportReset(),
@@ -1520,6 +1549,9 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
 
 async function loadModelAndGraph() {
   const context = getRequestedContext();
+  if (!context.projectId && !context.versionId) {
+    context.projectId = await resolveDefaultProjectId();
+  }
   syncNavigation(context.projectId);
   state.error = null;
   state.forecast = null;
@@ -1528,6 +1560,13 @@ async function loadModelAndGraph() {
   state.request = null;
   state.availablePointCounts = [];
   state.selectedPointCount = null;
+
+  if (!context.projectId && !context.versionId) {
+    state.model = null;
+    state.error = "В реестре пока нет проектов. Создайте проект на стартовой странице.";
+    renderAll();
+    return;
+  }
 
   try {
     const model = context.versionId

@@ -38,6 +38,7 @@ class TrainRequest(BaseModel):
     source_name: str = Field(default="inline")
     records: list[dict[str, Any]]
     training_options: TrainingOptionsRequest = Field(default_factory=TrainingOptionsRequest)
+    name: str | None = Field(default=None, max_length=120)
 
 
 class RetrainRequest(BaseModel):
@@ -47,6 +48,11 @@ class RetrainRequest(BaseModel):
     records: list[dict[str, Any]]
     training_options: TrainingOptionsRequest = Field(default_factory=TrainingOptionsRequest)
     retraining_options: RetrainingOptionsRequest = Field(default_factory=RetrainingOptionsRequest)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class RenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
 
 
 class PredictionRequest(BaseModel):

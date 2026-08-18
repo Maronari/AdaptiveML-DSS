@@ -94,6 +94,7 @@ class DatasetService:
         project_id: str,
         target: str,
         upload: UploadFile,
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Persist an uploaded dataset after the user confirms the target column."""
         source_name = upload.filename or "uploaded.csv"
@@ -104,6 +105,7 @@ class DatasetService:
             source_name=source_name,
             target=target,
             frame=frame,
+            name=name,
         )
         summary = self._build_summary(project_id=project_id, target=target, frame=frame)
         summary["source_name"] = source_name
@@ -115,6 +117,7 @@ class DatasetService:
         project_id: str,
         target: str,
         uploads: list[UploadFile],
+        name: str | None = None,
     ) -> dict[str, Any]:
         """Persist a combined dataset built from several uploaded files."""
         source_names, frame = await self.read_uploaded_tabular_collection(uploads, target=target)
@@ -125,6 +128,7 @@ class DatasetService:
             source_name=source_name,
             target=target,
             frame=frame,
+            name=name,
         )
         summary = self._build_summary(project_id=project_id, target=target, frame=frame)
         summary["source_name"] = source_name

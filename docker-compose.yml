@@ -29,7 +29,7 @@ services:
     volumes:
       - ./:/app
       - api_storage:/var/lib/adaptiveml/storage
-    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
     environment:
       ADAPTIVEML_STORAGE_ROOT: /var/lib/adaptiveml/storage
       ADAPTIVEML_OBJECT_STORAGE_BACKEND: minio
@@ -39,6 +39,7 @@ services:
       ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
       ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
       POSTGRES_HOST: postgres
+      MLFLOW_ALLOW_FILE_STORE: "true"
     ports:
       - "8000:8000"
     healthcheck:
@@ -79,6 +80,7 @@ services:
       ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
       ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
       POSTGRES_HOST: postgres
+      MLFLOW_ALLOW_FILE_STORE: "true"
     depends_on:
       api:
         condition: service_healthy
@@ -103,6 +105,7 @@ services:
       ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
       ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
       POSTGRES_HOST: postgres
+      MLFLOW_ALLOW_FILE_STORE: "true"
     depends_on:
       api:
         condition: service_healthy
@@ -127,6 +130,7 @@ services:
       ADAPTIVEML_OBJECT_STORAGE_DATASETS_BUCKET: adaptiveml-datasets
       ADAPTIVEML_OBJECT_STORAGE_ARTIFACTS_BUCKET: adaptiveml-artifacts
       POSTGRES_HOST: postgres
+      MLFLOW_ALLOW_FILE_STORE: "true"
     depends_on:
       api:
         condition: service_healthy

@@ -1586,7 +1586,7 @@ body.projects-page {
 
 .table-shell th,
 .table-shell td {
-  padding: 13px 14px;
+  padding: 9px 12px;
   border-bottom: 1px solid rgba(50, 70, 97, 0.09);
   vertical-align: top;
   white-space: nowrap;
@@ -1622,7 +1622,7 @@ body.projects-page {
 
 .graph-page .chart-panel-expanded {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 42%) minmax(160px, 1fr);
   gap: 10px;
   height: 100%;
   min-height: 0;
@@ -1643,6 +1643,9 @@ body.projects-page {
   align-items: start;
   gap: 12px;
   margin-bottom: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .chart-toolbar-actions {

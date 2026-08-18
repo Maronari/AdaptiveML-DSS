@@ -1,4 +1,3 @@
-const DEFAULT_PROJECT_ID = "demo";
 const EMPTY_VALUE = "—";
 const DEFAULT_PREVIEW_MESSAGE = "Загрузите CSV или Excel, и страница сразу проверит совместимость нового датасета с champion-моделью.";
 const LOADING_PREVIEW_MESSAGE = "Загрузка..";
@@ -8,7 +7,7 @@ const state = {
   activeJob: null,
   pollingTimer: null,
   busy: false,
-  projectId: DEFAULT_PROJECT_ID,
+  projectId: "",
 };
 
 const elements = {
@@ -16,6 +15,7 @@ const elements = {
   targetInput: document.getElementById("retraining-target"),
   taskTypeInput: document.getElementById("retraining-task-type"),
   backendInput: document.getElementById("retraining-backend"),
+  modelNameInput: document.getElementById("retraining-model-name"),
   historyScopeInput: document.getElementById("retraining-history-scope"),
   improvementThresholdInput: document.getElementById("retraining-improvement-threshold"),
   autoActivateInput: document.getElementById("retraining-auto-activate"),
@@ -39,6 +39,7 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
 };
@@ -46,7 +47,7 @@ const elements = {
 function getPageContext() {
   const searchParams = new URLSearchParams(window.location.search);
   return {
-    projectId: searchParams.get("project_id")?.trim() || DEFAULT_PROJECT_ID,
+    projectId: searchParams.get("project_id")?.trim() || "",
   };
 }
 
@@ -109,6 +110,7 @@ function syncNavigation(projectId) {
     [elements.trainingLinks, "./training.html"],
     [elements.retrainingLinks, "./retraining.html"],
     [elements.modelsLinks, "./models.html"],
+    [elements.reportLinks, "./report.html"],
     [elements.graphLinks, "./graph.html"],
     [elements.dssLinks, "./dss.html"],
   ];
@@ -222,6 +224,21 @@ async function fetchJson(path) {
     throw new Error(extractErrorMessage(payload, response));
   }
   return payload;
+}
+
+async function resolveDefaultProjectId() {
+  try {
+    const payload = await fetchJson("/projects");
+    const projects = Array.isArray(payload.items) ? payload.items : [];
+    return (
+      projects.find((project) => project.has_champion_model)?.project_id ||
+      projects.find((project) => project.has_models)?.project_id ||
+      projects[0]?.project_id ||
+      ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 async function postUploads(path, { files, projectId, target = "" }) {
@@ -522,6 +539,10 @@ function buildRetrainingJobFormData(datasetVersionId) {
   formData.append("minimum_relative_improvement", String(improvement / 100));
   formData.append("evaluation_fraction", "0.2");
   formData.append("auto_activate", String(elements.autoActivateInput.checked));
+  const modelName = elements.modelNameInput.value.trim();
+  if (modelName) {
+    formData.append("name", modelName);
+  }
   return formData;
 }
 
@@ -709,13 +730,21 @@ elements.submitButton.addEventListener("click", async () => {
 
 async function initializePage() {
   const pageContext = getPageContext();
-  state.projectId = pageContext.projectId;
+  state.projectId = pageContext.projectId || (await resolveDefaultProjectId());
   syncNavigation(state.projectId);
   clearInspection();
   setBusy(false);
   setJobStatus("idle", "Очередь пуста.");
   setStatus("idle", "Загрузите новый датасет для проверки и дообучения.");
-  appendLog(`Страница дообучения открыта для проекта "${state.projectId}".`);
+  appendLog(
+    state.projectId
+      ? `Страница дообучения открыта для проекта "${state.projectId}".`
+      : "В реестре пока нет проектов. Создайте проект на стартовой странице.",
+  );
+
+  if (!state.projectId) {
+    return;
+  }
 
   try {
     await restoreActiveJob(state.projectId);

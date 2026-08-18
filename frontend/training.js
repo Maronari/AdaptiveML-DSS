@@ -13,9 +13,11 @@ const elements = {
   trainingLinks: Array.from(document.querySelectorAll("[data-nav-training]")),
   retrainingLinks: Array.from(document.querySelectorAll("[data-nav-retraining]")),
   modelsLinks: Array.from(document.querySelectorAll("[data-nav-models]")),
+  reportLinks: Array.from(document.querySelectorAll("[data-nav-report]")),
   graphLinks: Array.from(document.querySelectorAll("[data-nav-graph]")),
   dssLinks: Array.from(document.querySelectorAll("[data-nav-dss]")),
   targetInput: document.getElementById("target-column"),
+  modelNameInput: document.getElementById("model-name"),
   taskTypeInput: document.getElementById("task-type"),
   backendInput: document.getElementById("training-backend"),
   presetInput: document.getElementById("training-preset"),
@@ -55,6 +57,7 @@ function getWorkflowState() {
     datasetVersionId: elements.datasetVersionInput.value.trim(),
     projectId: elements.projectIdInput.value.trim() || "demo",
     target: elements.targetInput.value.trim(),
+    modelName: elements.modelNameInput.value.trim(),
     trainingOptions: {
       task_type: elements.taskTypeInput.value,
       backend: elements.backendInput.value,
@@ -192,7 +195,7 @@ async function postForm(path, formData) {
   return payload;
 }
 
-function buildTrainingFormData({ projectId, datasetVersionId, trainingOptions }) {
+function buildTrainingFormData({ projectId, datasetVersionId, trainingOptions, modelName = "" }) {
   const formData = new FormData();
   formData.append("project_id", projectId);
   formData.append("dataset_version_id", datasetVersionId);
@@ -205,14 +208,18 @@ function buildTrainingFormData({ projectId, datasetVersionId, trainingOptions })
   formData.append("test_size", String(trainingOptions.test_size));
   formData.append("cv_folds", String(trainingOptions.cv_folds));
   formData.append("enable_forecast", String(trainingOptions.enable_forecast));
+  if (modelName) {
+    formData.append("name", modelName);
+  }
   return formData;
 }
 
 function trainingStatusMessage(training) {
   const effectiveOptions = training.training_options?.effective ?? {};
   const presetSuffix = effectiveOptions.preset ? `/${effectiveOptions.preset}` : "";
+  const modelLabel = training.model_version.name || training.model_version.version_id;
   let message =
-    `Обучение завершено: backend=${training.backend}${presetSuffix}, модель=${training.model_version.version_id}.`;
+    `Обучение завершено: backend=${training.backend}${presetSuffix}, модель=${modelLabel}.`;
   if (training.mlflow?.run_id) {
     message += ` MLflow run=${training.mlflow.run_id}.`;
   }
@@ -258,6 +265,7 @@ function syncProjectNavigation(projectId) {
     [elements.trainingLinks, "./training.html"],
     [elements.retrainingLinks, "./retraining.html"],
     [elements.modelsLinks, "./models.html"],
+    [elements.reportLinks, "./report.html"],
     [elements.graphLinks, "./graph.html"],
     [elements.dssLinks, "./dss.html"],
   ];
@@ -428,6 +436,7 @@ async function handleTrain() {
     projectId: workflow.projectId,
     datasetVersionId: workflow.datasetVersionId,
     trainingOptions: workflow.trainingOptions,
+    modelName: workflow.modelName,
   });
   await enqueueAndPoll(
     `Ставлю обучение в очередь для проекта "${workflow.projectId}" по датасету "${workflow.datasetVersionId}".`,
