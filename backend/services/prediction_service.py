@@ -270,16 +270,22 @@ class PredictionService:
         return run_id, unit
 
     def get_forecast_comparison(self, run_id: str) -> dict[str, Any]:
-        """Match a saved forecast run against actual data registered afterwards."""
+        """Match a saved forecast run against any dataset version carrying real values for its timestamps.
+
+        Deliberately not filtered by "registered after the run": the frontend regenerates a fresh
+        forecast run on every page load, so a strict registration-order filter would make a run's
+        comparison go stale (and match nothing) the moment the page is revisited. Matching purely by
+        timestamp overlap keeps working regardless of when the run was (re)created relative to the
+        upload, and past-dated candidates simply never overlap a forecast's future timestamps anyway.
+        """
         run = self.registry_service.get_forecast_run(run_id)
         target = run["target"]
 
-        candidates = [
-            dataset
-            for dataset in self.registry_service.list_dataset_versions(run["project_id"])
-            if dataset["created_at"] > run["created_at"]
-        ]
-        candidates.sort(key=lambda item: item["created_at"], reverse=True)
+        candidates = sorted(
+            self.registry_service.list_dataset_versions(run["project_id"]),
+            key=lambda item: item["created_at"],
+            reverse=True,
+        )
 
         base_frequency_minutes = run.get("base_frequency_minutes")
         tolerance = (
