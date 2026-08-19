@@ -38,6 +38,12 @@ IDENTIFIER_NAME_HINTS = (
     "no",
 )
 
+UNIT_NAME_HINTS = (
+    "unit",
+    "единиц",
+    "измерен",
+)
+
 CSV_ENCODINGS = ("utf-8-sig", "utf-8", "cp1251", "latin-1")
 CSV_DELIMITERS = (None, ";", ",", "\t", "|")
 
@@ -95,6 +101,7 @@ class DatasetService:
         target: str,
         upload: UploadFile,
         name: str | None = None,
+        unit: str | None = None,
     ) -> dict[str, Any]:
         """Persist an uploaded dataset after the user confirms the target column."""
         source_name = upload.filename or "uploaded.csv"
@@ -106,6 +113,7 @@ class DatasetService:
             target=target,
             frame=frame,
             name=name,
+            unit=unit,
         )
         summary = self._build_summary(project_id=project_id, target=target, frame=frame)
         summary["source_name"] = source_name
@@ -118,6 +126,7 @@ class DatasetService:
         target: str,
         uploads: list[UploadFile],
         name: str | None = None,
+        unit: str | None = None,
     ) -> dict[str, Any]:
         """Persist a combined dataset built from several uploaded files."""
         source_names, frame = await self.read_uploaded_tabular_collection(uploads, target=target)
@@ -129,6 +138,7 @@ class DatasetService:
             target=target,
             frame=frame,
             name=name,
+            unit=unit,
         )
         summary = self._build_summary(project_id=project_id, target=target, frame=frame)
         summary["source_name"] = source_name
@@ -394,7 +404,22 @@ class DatasetService:
             "temporal_context": self._build_temporal_context(frame, column_profiles),
             "target_summaries": target_summaries,
             "project_context": self._build_project_context(project_id),
+            "suggested_unit": self._detect_suggested_unit(frame),
         }
+
+    @staticmethod
+    def _detect_suggested_unit(frame: pd.DataFrame) -> str | None:
+        """Detect a likely unit-of-measure value from a unit-like column, if any."""
+        for column in frame.columns:
+            normalized_name = str(column).casefold()
+            if not any(hint in normalized_name for hint in UNIT_NAME_HINTS):
+                continue
+            cleaned = frame[column].dropna().astype(str).str.strip()
+            cleaned = cleaned[cleaned != ""]
+            if cleaned.empty:
+                continue
+            return str(cleaned.value_counts().index[0])
+        return None
 
     @staticmethod
     def _build_column_type_summary(column_profiles: list[dict[str, Any]]) -> dict[str, Any]:

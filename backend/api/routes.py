@@ -160,6 +160,7 @@ async def register_dataset_file(
     target: str = Form(...),
     project_id: str = Form("default"),
     name: str | None = Form(None),
+    unit: str | None = Form(None),
 ) -> dict[str, Any]:
     """Persist an uploaded dataset version after target confirmation."""
     try:
@@ -168,6 +169,7 @@ async def register_dataset_file(
             target=target,
             upload=file,
             name=name,
+            unit=unit,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -179,6 +181,7 @@ async def register_dataset_files(
     target: str = Form(...),
     project_id: str = Form("default"),
     name: str | None = Form(None),
+    unit: str | None = Form(None),
 ) -> dict[str, Any]:
     """Persist a dataset version assembled from several uploaded files."""
     try:
@@ -187,6 +190,7 @@ async def register_dataset_files(
             target=target,
             uploads=files,
             name=name,
+            unit=unit,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -237,6 +241,7 @@ def run_training(payload: TrainRequest) -> dict[str, Any]:
             source_name=payload.source_name,
             training_options=payload.training_options.model_dump(),
             name=payload.name,
+            unit=payload.unit,
         )
     except ValueError as exc:
         logger.warning("Training request failed: project_id=%s error=%s", payload.project_id, exc)
@@ -727,6 +732,15 @@ def run_forecast(payload: ForecastRequest) -> dict[str, Any]:
             horizon_minutes=payload.horizon_minutes,
             steps=payload.steps,
         )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/forecast/{run_id}/comparison", tags=["forecast"])
+def get_forecast_comparison(run_id: str) -> dict[str, Any]:
+    """Compare a saved forecast run against actual data registered afterwards."""
+    try:
+        return prediction_service.get_forecast_comparison(run_id=run_id)
     except ValueError as exc:
         raise _bad_request(exc) from exc
 

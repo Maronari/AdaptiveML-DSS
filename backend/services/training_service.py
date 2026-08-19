@@ -26,6 +26,7 @@ class TrainingService:
         source_name: str = "inline",
         training_options: dict[str, Any] | None = None,
         name: str | None = None,
+        unit: str | None = None,
     ) -> dict[str, Any]:
         """Train a model from inline records and register the result."""
         frame = dataframe_from_records(records)
@@ -36,6 +37,7 @@ class TrainingService:
             source_name=source_name,
             training_options=training_options,
             name=name,
+            unit=unit,
         )
 
     async def train_from_upload(
@@ -45,6 +47,7 @@ class TrainingService:
         upload: UploadFile,
         training_options: dict[str, Any] | None = None,
         name: str | None = None,
+        unit: str | None = None,
     ) -> dict[str, Any]:
         """Train a model from an uploaded CSV or Excel file."""
         frame = await self.dataset_service.read_uploaded_tabular(upload)
@@ -58,6 +61,7 @@ class TrainingService:
             source_name=source_name,
             training_options=training_options,
             name=name,
+            unit=unit,
         )
 
     def train_from_dataset_version(
@@ -94,6 +98,7 @@ class TrainingService:
         training_options: dict[str, Any] | None = None,
         dataset_version: dict[str, Any] | None = None,
         name: str | None = None,
+        unit: str | None = None,
     ) -> dict[str, Any]:
         """Train on a prepared frame, optionally reusing an existing dataset version."""
         self.dataset_service._validate_training_frame(frame, target)
@@ -104,6 +109,7 @@ class TrainingService:
                 source_name=source_name,
                 target=target,
                 frame=frame,
+                unit=unit,
             )
             dataset_payload = created_dataset_version.to_dict()
             dataset_version_id = created_dataset_version.version_id

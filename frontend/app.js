@@ -1,3 +1,4 @@
+const EMPTY_VALUE = "—";
 const DEFAULT_CHART_HEIGHT = 520;
 const DEFAULT_INTERVAL_MINUTES = 120;
 const MIN_INTERVAL_MINUTES = 10;
@@ -11,6 +12,7 @@ const MAX_TOTAL_POINTS = 720;
 const state = {
   model: null,
   forecast: null,
+  forecastComparison: null,
   displayForecast: null,
   timelineRows: null,
   error: null,
@@ -60,6 +62,7 @@ const elements = {
   forecastPanelNote: document.getElementById("forecast-panel-note"),
   predictionTableBody: document.getElementById("prediction-table-body"),
   predictionTableEmpty: document.getElementById("prediction-table-empty"),
+  predictionTableAbsErrorHeader: document.getElementById("prediction-table-abs-error-header"),
   intervalSlider: document.getElementById("interval-slider"),
   intervalValue: document.getElementById("interval-value"),
   intervalMin: document.getElementById("interval-min"),
@@ -580,6 +583,7 @@ function showTooltip(pointLayout) {
     history: "История",
     model: "Модель",
     forecast: "Прогноз",
+    postfactum_actual: "Факт (после прогноза)",
   };
   const tooltip = elements.chartTooltip;
   tooltip.innerHTML = `
@@ -743,6 +747,7 @@ function getTimelineRows() {
         actual: null,
         model: null,
         forecast: null,
+        postfactum_actual: null,
       };
       rowsByTimestamp.set(normalizedTimestamp, row);
     }
@@ -772,6 +777,18 @@ function getTimelineRows() {
     const value = Number(item.prediction);
     if (row && Number.isFinite(value)) {
       row.forecast = value;
+    }
+  });
+
+  const comparisonPoints = Array.isArray(state.forecastComparison?.points) ? state.forecastComparison.points : [];
+  comparisonPoints.forEach((item) => {
+    if (item.actual === null || item.actual === undefined) {
+      return;
+    }
+    const row = ensureRow(item.timestamp);
+    const value = Number(item.actual);
+    if (row && Number.isFinite(value)) {
+      row.postfactum_actual = value;
     }
   });
 
@@ -864,9 +881,24 @@ function clearPredictionTable(message = "После загрузки прогн�
   elements.predictionTableEmpty.textContent = message;
 }
 
+function getComparisonPointsByTimestamp() {
+  const points = Array.isArray(state.forecastComparison?.points) ? state.forecastComparison.points : [];
+  const map = new Map();
+  points.forEach((point) => {
+    const key = normalizeTimestamp(point.timestamp);
+    if (key) {
+      map.set(key, point);
+    }
+  });
+  return map;
+}
+
 function renderPredictionTable() {
   const rows = Array.isArray(state.displayForecast) ? state.displayForecast : [];
   elements.predictionTableBody.innerHTML = "";
+
+  const unit = state.forecast?.unit;
+  elements.predictionTableAbsErrorHeader.textContent = unit ? `Абс. ошибка, ${unit}` : "Абс. ошибка";
 
   if (!rows.length) {
     clearPredictionTable(
@@ -875,12 +907,43 @@ function renderPredictionTable() {
     return;
   }
 
-  elements.predictionTableBody.innerHTML = rows
-    .map(
-      (item) =>
-        `<tr><td>${item.step}</td><td>${formatTimestamp(item.timestamp)}</td><td>${formatNumber(item.prediction)}</td></tr>`,
-    )
-    .join("");
+  const comparisonByTimestamp = getComparisonPointsByTimestamp();
+
+  const bodyRows = rows.map((item) => {
+    const comparisonPoint = comparisonByTimestamp.get(normalizeTimestamp(item.timestamp));
+    const hasActual = comparisonPoint && comparisonPoint.actual !== null && comparisonPoint.actual !== undefined;
+    const actualCell = hasActual ? formatNumber(comparisonPoint.actual) : EMPTY_VALUE;
+    const absErrorCell =
+      comparisonPoint && comparisonPoint.abs_error !== null && comparisonPoint.abs_error !== undefined
+        ? formatNumber(comparisonPoint.abs_error)
+        : EMPTY_VALUE;
+    const mapeCell =
+      comparisonPoint && comparisonPoint.mape_percent !== null && comparisonPoint.mape_percent !== undefined
+        ? formatNumber(comparisonPoint.mape_percent, 2)
+        : EMPTY_VALUE;
+    return (
+      `<tr><td>${item.step}</td><td>${formatTimestamp(item.timestamp)}</td><td>${formatNumber(item.prediction)}</td>` +
+      `<td>${actualCell}</td><td>${absErrorCell}</td><td>${mapeCell}</td></tr>`
+    );
+  });
+
+  const aggregate = state.forecastComparison?.aggregate;
+  if (aggregate && aggregate.matched_points > 0) {
+    const meanAbsErrorCell =
+      aggregate.mean_abs_error !== null && aggregate.mean_abs_error !== undefined
+        ? formatNumber(aggregate.mean_abs_error)
+        : EMPTY_VALUE;
+    const meanMapeCell =
+      aggregate.mean_mape_percent !== null && aggregate.mean_mape_percent !== undefined
+        ? formatNumber(aggregate.mean_mape_percent, 2)
+        : EMPTY_VALUE;
+    bodyRows.push(
+      `<tr class="is-aggregate-row"><td>Итого / среднее</td><td>${EMPTY_VALUE}</td><td>${EMPTY_VALUE}</td>` +
+        `<td>${EMPTY_VALUE}</td><td>${meanAbsErrorCell}</td><td>${meanMapeCell}</td></tr>`,
+    );
+  }
+
+  elements.predictionTableBody.innerHTML = bodyRows.join("");
   elements.predictionTableEmpty.hidden = true;
 }
 
@@ -1093,6 +1156,9 @@ function drawForecastChart() {
     if (Number.isFinite(item.forecast)) {
       values.push(item.forecast);
     }
+    if (Number.isFinite(item.postfactum_actual)) {
+      values.push(item.postfactum_actual);
+    }
   });
 
   context.clearRect(0, 0, width, height);
@@ -1111,6 +1177,9 @@ function drawForecastChart() {
   const plotHeight = bounds.bottom - bounds.top;
   const plotWidth = bounds.right - bounds.left;
 
+  const hasPostfactumSeries = visibleSlice.rows.some((item) => Number.isFinite(item.postfactum_actual));
+  const unit = state.forecast?.unit;
+
   drawAxes(context, bounds, theme);
   drawLegend(
     context,
@@ -1118,9 +1187,16 @@ function drawForecastChart() {
       { label: "История", color: theme.actual },
       { label: "Модель", color: theme.model },
       { label: "Прогноз", color: theme.predicted },
+      ...(hasPostfactumSeries ? [{ label: "Факт (после прогноза)", color: theme.model }] : []),
     ],
     theme,
   );
+
+  if (unit) {
+    context.fillStyle = theme.label;
+    setChartFont(context, 10, 500);
+    context.fillText(unit, 10, bounds.top - 6);
+  }
 
   for (let tick = 0; tick <= 4; tick += 1) {
     const ratio = tick / 4;
@@ -1174,6 +1250,7 @@ function drawForecastChart() {
   const historyPoints = [];
   const modelPoints = [];
   const forecastPoints = [];
+  const postfactumPoints = [];
   let lastHistoryIndex = -1;
 
   visibleSlice.rows.forEach((item, index) => {
@@ -1215,6 +1292,19 @@ function drawForecastChart() {
       };
       point.pointId = getPointId(point);
       forecastPoints.push(point);
+      pointLayouts.push(point);
+    }
+
+    if (Number.isFinite(item.postfactum_actual)) {
+      const point = {
+        timestamp: item.timestamp,
+        value: item.postfactum_actual,
+        series: "postfactum_actual",
+        x,
+        y: getPointY(item.postfactum_actual),
+      };
+      point.pointId = getPointId(point);
+      postfactumPoints.push(point);
       pointLayouts.push(point);
     }
   });
@@ -1262,6 +1352,7 @@ function drawForecastChart() {
         ? modelPoints[modelPoints.length - 1]
         : null;
   drawSeries(forecastPoints, theme.predicted, true, bridgePoint);
+  drawSeries(postfactumPoints, theme.model);
 
   chartState.renderedPoints = pointLayouts;
   const hoveredPoint = pointLayouts.find((point) => point.pointId === chartState.hoverPointId) || null;
@@ -1272,6 +1363,7 @@ function drawForecastChart() {
   drawPointMarkers(context, historyPoints, theme.actual, 2.75);
   drawPointMarkers(context, modelPoints, theme.model, 2.75);
   drawPointMarkers(context, forecastPoints, theme.predicted, 3);
+  drawPointMarkers(context, postfactumPoints, theme.model, 3);
 
   context.fillStyle = theme.text;
   setChartFont(context, 11, 600);
@@ -1291,7 +1383,7 @@ function drawForecastChart() {
     ? " Колесо мыши масштабирует график, перетаскивание двигает окно влево и вправо, наведение показывает значение точки."
     : " Наведите на точку, чтобы увидеть значение.";
 
-  elements.chartTitle.textContent = `Прогноз модели ${modelLabel}`;
+  elements.chartTitle.textContent = unit ? `Прогноз модели ${modelLabel}, ${unit}` : `Прогноз модели ${modelLabel}`;
   updateChartControls(
     `${baseText}${rangeText}${modelText}${interactionText}`,
     zoomEnabled && !isViewportReset(),
@@ -1488,9 +1580,27 @@ function stopDrag(pointerId = null) {
   scheduleChartRender();
 }
 
+async function loadForecastComparison(runId, token) {
+  try {
+    const comparison = await fetchJson(`/forecast/${encodeURIComponent(runId)}/comparison`);
+    if (token !== state.forecastToken) {
+      return;
+    }
+    state.forecastComparison = comparison;
+    invalidateTimelineRows();
+    renderAll();
+  } catch {
+    if (token !== state.forecastToken) {
+      return;
+    }
+    state.forecastComparison = null;
+  }
+}
+
 async function loadForecast(intervalMinutes, pointCount = state.selectedPointCount, { resetZoom = true } = {}) {
   if (!state.model?.forecasting?.available) {
     state.forecast = null;
+    state.forecastComparison = null;
     state.displayForecast = null;
     invalidateTimelineRows();
     state.request = null;
@@ -1522,6 +1632,7 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
 
     state.error = null;
     state.forecast = forecast;
+    state.forecastComparison = null;
     state.request = request;
     state.displayForecast = buildDisplayForecast(forecast, request);
     invalidateTimelineRows();
@@ -1529,12 +1640,16 @@ async function loadForecast(intervalMinutes, pointCount = state.selectedPointCou
       resetViewport();
     }
     updateLocation();
+    if (forecast.run_id) {
+      loadForecastComparison(forecast.run_id, token);
+    }
   } catch (error) {
     if (token !== state.forecastToken) {
       return;
     }
 
     state.forecast = null;
+    state.forecastComparison = null;
     state.displayForecast = null;
     invalidateTimelineRows();
     state.request = request;
@@ -1555,6 +1670,7 @@ async function loadModelAndGraph() {
   syncNavigation(context.projectId);
   state.error = null;
   state.forecast = null;
+  state.forecastComparison = null;
   state.displayForecast = null;
   invalidateTimelineRows();
   state.request = null;

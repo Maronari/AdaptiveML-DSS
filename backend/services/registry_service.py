@@ -31,6 +31,7 @@ class RegistryService:
         target: str,
         frame: pd.DataFrame,
         name: str | None = None,
+        unit: str | None = None,
     ) -> DatasetVersion:
         """Persist a new dataset snapshot and register its metadata."""
         self._ensure_project_record(project_id)
@@ -54,6 +55,7 @@ class RegistryService:
             storage_backend=storage_ref.storage_backend,
             bucket=storage_ref.bucket,
             object_key=storage_ref.object_key,
+            unit=self._clean_name(unit),
         )
         datasets = self.registry.read("datasets")
         datasets.append(record.to_dict())
@@ -99,6 +101,11 @@ class RegistryService:
         if latest is None:
             raise ValueError(f"No dataset versions found for project '{project_id}'.")
         return latest
+
+    def list_dataset_versions(self, project_id: str) -> list[dict[str, Any]]:
+        """Return all dataset version records for one project."""
+        datasets = self.registry.read("datasets")
+        return [dataset for dataset in datasets if dataset["project_id"] == project_id]
 
     def register_model_version(
         self,
@@ -270,6 +277,25 @@ class RegistryService:
         if not comparisons:
             raise ValueError("No comparison data found yet.")
         return comparisons[-1]
+
+    def save_forecast_run(self, record: dict[str, Any]) -> None:
+        """Persist one forecast run record for later postfactum comparison."""
+        runs = self.registry.read("forecast_runs")
+        runs.append(record)
+        self.registry.write("forecast_runs", runs)
+
+    def list_forecast_runs(self, project_id: str) -> list[dict[str, Any]]:
+        """Return stored forecast run records for one project."""
+        runs = self.registry.read("forecast_runs")
+        return [run for run in runs if run.get("project_id") == project_id]
+
+    def get_forecast_run(self, run_id: str) -> dict[str, Any]:
+        """Return one forecast run record by id."""
+        runs = self.registry.read("forecast_runs")
+        for run in runs:
+            if run.get("run_id") == run_id:
+                return run
+        raise ValueError(f"Forecast run '{run_id}' was not found.")
 
     def activate_model_version(self, project_id: str, version_id: str) -> ModelVersion:
         """Mark the selected version as champion and archive the previous champion."""
@@ -453,6 +479,7 @@ class RegistryService:
         models = self.registry.read("models")
         jobs = self.registry.read("jobs")
         latest_comparison = self.registry.read("latest_comparison")
+        forecast_runs = self.registry.read("forecast_runs")
 
         project_exists = any(project["project_id"] == project_id for project in projects)
         dataset_records = [dataset for dataset in datasets if dataset["project_id"] == project_id]
@@ -480,6 +507,10 @@ class RegistryService:
         self.registry.write(
             "latest_comparison",
             [item for item in latest_comparison if item.get("project_id") != project_id],
+        )
+        self.registry.write(
+            "forecast_runs",
+            [run for run in forecast_runs if run.get("project_id") != project_id],
         )
 
         for dataset in dataset_records:
@@ -664,7 +695,7 @@ class RegistryService:
 
     def _migrate_legacy_registry(self) -> None:
         """Import old JSON registry collections into SQLite on first access."""
-        for name in ("projects", "datasets", "models", "latest_comparison", "jobs"):
+        for name in ("projects", "datasets", "models", "latest_comparison", "jobs", "forecast_runs"):
             if self.registry.read(name):
                 continue
             legacy_payload = self.legacy_registry.read(name)

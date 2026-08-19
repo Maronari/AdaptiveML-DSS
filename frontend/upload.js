@@ -13,6 +13,7 @@ const elements = {
   fileInput: document.getElementById("dataset-file"),
   targetSelect: document.getElementById("target-column"),
   datasetNameInput: document.getElementById("dataset-name"),
+  datasetUnitInput: document.getElementById("dataset-unit"),
   continueButton: document.getElementById("continue-button"),
   summaryRows: document.getElementById("summary-rows"),
   summaryColumns: document.getElementById("summary-columns"),
@@ -94,7 +95,7 @@ async function fetchJson(path) {
   return payload;
 }
 
-async function postUploads(path, { files, projectId, target = "", name = "" }) {
+async function postUploads(path, { files, projectId, target = "", name = "", unit = "" }) {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append(files.length > 1 ? "files" : "file", file);
@@ -105,6 +106,9 @@ async function postUploads(path, { files, projectId, target = "", name = "" }) {
   }
   if (name) {
     formData.append("name", name);
+  }
+  if (unit) {
+    formData.append("unit", unit);
   }
 
   const response = await fetch(path, {
@@ -625,6 +629,7 @@ function clearInspection() {
   elements.summaryColumns.textContent = EMPTY_VALUE;
   elements.summaryDuplicates.textContent = EMPTY_VALUE;
   elements.summarySource.textContent = EMPTY_VALUE;
+  elements.datasetUnitInput.value = "";
   setDetailEmpty(elements.columnTypesBody, "Загрузите файл, чтобы увидеть состав схемы.");
   setDetailEmpty(elements.temporalContextBody, "Временная шкала появится после разбора файла.");
   setDetailEmpty(elements.targetSummaryBody, "Выберите целевую колонку после автозагрузки.");
@@ -857,6 +862,9 @@ function renderInspection(inspection) {
   elements.summaryColumns.textContent = String(inspection.columns?.length ?? EMPTY_VALUE);
   elements.summaryDuplicates.textContent = String(inspection.duplicates ?? EMPTY_VALUE);
   elements.summarySource.textContent = inspection.source_name || EMPTY_VALUE;
+  if (inspection.suggested_unit && !elements.datasetUnitInput.value.trim()) {
+    elements.datasetUnitInput.value = inspection.suggested_unit;
+  }
   renderTargetOptions();
   renderColumnTypes();
   renderTemporalContext();
@@ -925,11 +933,13 @@ async function handleContinue() {
   const files = requireFiles();
   const target = requireSelectedTarget();
   const name = elements.datasetNameInput.value.trim();
+  const unit = elements.datasetUnitInput.value.trim();
   const payload = await postUploads(files.length > 1 ? "/datasets/register/files" : "/datasets/register/file", {
     files,
     projectId: state.projectId,
     target,
     name,
+    unit,
   });
   const label = payload.dataset_version.name || payload.dataset_version.version_id;
   setStatus("success", `Датасет сохранён: ${label}.`);

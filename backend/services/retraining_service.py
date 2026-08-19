@@ -234,11 +234,19 @@ class RetrainingService:
                 f"Current champion is '{current_model['task_type']}', candidate is '{training_result.task_type}'."
             )
 
+        try:
+            current_dataset_unit = self.registry_service.get_dataset_version(
+                current_model["dataset_version_id"]
+            ).get("unit")
+        except ValueError:
+            current_dataset_unit = None
+
         dataset_version = self.registry_service.create_dataset_version(
             project_id=project_id,
             source_name=f"retraining:{retraining.history_scope}:{source_name}",
             target=target,
             frame=candidate_frame,
+            unit=current_dataset_unit,
         )
         candidate_model = self.registry_service.register_model_version(
             project_id=project_id,

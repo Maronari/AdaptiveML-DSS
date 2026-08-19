@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
+import pandas as pd
 from fastapi import UploadFile
 
 from automl.evaluation.metrics import evaluate_predictions
-from automl.training.forecasting import run_forecast_from_bundle
+from automl.training.forecasting import build_timestamp_series, infer_timestamp_descriptor, run_forecast_from_bundle
 from backend.services.dataset_service import DatasetService
 from backend.services.registry_service import RegistryService
 from backend.utils.io import dataframe_from_records, dataframe_to_records, pythonize
@@ -185,11 +187,19 @@ class PredictionService:
             steps=steps,
             horizon_minutes=horizon_minutes,
         )
+        run_id, unit = self._persist_forecast_run(
+            project_id=project_id,
+            model_version=champion["version_id"],
+            dataset_version_id=champion["dataset_version_id"],
+            forecast_payload=forecast_payload,
+        )
         return {
             "project_id": project_id,
             "model_version": champion["version_id"],
             "task_type": champion["task_type"],
             **forecast_payload,
+            "run_id": run_id,
+            "unit": unit,
         }
 
     def forecast_model_version(
@@ -214,11 +224,154 @@ class PredictionService:
             steps=resolved_steps,
             horizon_minutes=resolved_horizon,
         )
+        run_id, unit = self._persist_forecast_run(
+            project_id=model["project_id"],
+            model_version=model["version_id"],
+            dataset_version_id=model["dataset_version_id"],
+            forecast_payload=forecast_payload,
+        )
         return {
             "project_id": model["project_id"],
             "model_version": model["version_id"],
             "task_type": model["task_type"],
             **forecast_payload,
+            "run_id": run_id,
+            "unit": unit,
+        }
+
+    def _persist_forecast_run(
+        self,
+        project_id: str,
+        model_version: str,
+        dataset_version_id: str,
+        forecast_payload: dict[str, Any],
+    ) -> tuple[str, str | None]:
+        """Save a compact forecast run record and return its id and dataset unit."""
+        unit = None
+        try:
+            unit = self.registry_service.get_dataset_version(dataset_version_id).get("unit")
+        except ValueError:
+            unit = None
+
+        run_id = f"forecast-{uuid4().hex[:12]}"
+        self.registry_service.save_forecast_run(
+            {
+                "run_id": run_id,
+                "project_id": project_id,
+                "model_version": model_version,
+                "dataset_version_id": dataset_version_id,
+                "target": forecast_payload.get("target"),
+                "unit": unit,
+                "created_at": datetime.now(UTC).isoformat(),
+                "base_frequency_minutes": forecast_payload.get("base_frequency_minutes"),
+                "points": list(forecast_payload.get("forecast") or []),
+            }
+        )
+        return run_id, unit
+
+    def get_forecast_comparison(self, run_id: str) -> dict[str, Any]:
+        """Match a saved forecast run against actual data registered afterwards."""
+        run = self.registry_service.get_forecast_run(run_id)
+        target = run["target"]
+
+        candidates = [
+            dataset
+            for dataset in self.registry_service.list_dataset_versions(run["project_id"])
+            if dataset["created_at"] > run["created_at"]
+        ]
+        candidates.sort(key=lambda item: item["created_at"], reverse=True)
+
+        base_frequency_minutes = run.get("base_frequency_minutes")
+        tolerance = (
+            pd.Timedelta(minutes=float(base_frequency_minutes) / 2.0)
+            if base_frequency_minutes
+            else pd.Timedelta(0)
+        )
+
+        actual_by_timestamp: dict[pd.Timestamp, float] = {}
+        for dataset in candidates:
+            try:
+                frame = self.registry_service.load_dataset_version_frame(dataset["version_id"])
+            except (ValueError, OSError):
+                continue
+            if target not in frame.columns:
+                continue
+
+            descriptor = infer_timestamp_descriptor(frame=frame, target=target)
+            if descriptor is None:
+                continue
+
+            timestamps = build_timestamp_series(frame=frame, descriptor=descriptor)
+            for timestamp, value in zip(timestamps, frame[target]):
+                if pd.isna(timestamp) or pd.isna(value):
+                    continue
+                key = pd.Timestamp(timestamp)
+                if key not in actual_by_timestamp:
+                    actual_by_timestamp[key] = float(value)
+
+        def find_actual(point_timestamp: str) -> float | None:
+            """Look up an actual value for one forecast point, with a small tolerance."""
+            target_ts = pd.Timestamp(point_timestamp)
+            if target_ts in actual_by_timestamp:
+                return actual_by_timestamp[target_ts]
+            if tolerance <= pd.Timedelta(0):
+                return None
+
+            best_value: float | None = None
+            best_diff: pd.Timedelta | None = None
+            for candidate_ts, candidate_value in actual_by_timestamp.items():
+                diff = abs(candidate_ts - target_ts)
+                if diff <= tolerance and (best_diff is None or diff < best_diff):
+                    best_diff = diff
+                    best_value = candidate_value
+            return best_value
+
+        points: list[dict[str, Any]] = []
+        matched_abs_errors: list[float] = []
+        matched_mape_values: list[float] = []
+
+        for point in run["points"]:
+            prediction = float(point["prediction"])
+            actual = find_actual(point["timestamp"])
+            abs_error = None
+            mape_percent = None
+            if actual is not None:
+                abs_error = round(actual - prediction, 6)
+                matched_abs_errors.append(abs_error)
+                if actual != 0:
+                    mape_percent = round(abs(actual - prediction) / abs(actual) * 100.0, 4)
+                    matched_mape_values.append(mape_percent)
+
+            points.append(
+                {
+                    "step": point.get("step"),
+                    "timestamp": point["timestamp"],
+                    "prediction": prediction,
+                    "actual": actual,
+                    "abs_error": abs_error,
+                    "mape_percent": mape_percent,
+                }
+            )
+
+        aggregate = {
+            "matched_points": len(matched_abs_errors),
+            "mean_abs_error": (
+                round(sum(matched_abs_errors) / len(matched_abs_errors), 6) if matched_abs_errors else None
+            ),
+            "mean_mape_percent": (
+                round(sum(matched_mape_values) / len(matched_mape_values), 4) if matched_mape_values else None
+            ),
+        }
+
+        return {
+            "run_id": run["run_id"],
+            "project_id": run["project_id"],
+            "model_version": run["model_version"],
+            "target": target,
+            "unit": run.get("unit"),
+            "created_at": run["created_at"],
+            "points": points,
+            "aggregate": aggregate,
         }
 
     def predict_with_bundle(self, bundle: dict[str, Any], frame) -> list[dict[str, Any]]:

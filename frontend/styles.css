@@ -1596,6 +1596,13 @@ body.projects-page {
   background: rgba(244, 247, 252, 0.72);
 }
 
+.table-shell tbody tr.is-aggregate-row,
+.prediction-table-shell tbody tr.is-aggregate-row {
+  font-weight: 600;
+  color: var(--ink-strong);
+  background: rgba(218, 139, 43, 0.12);
+}
+
 .table-placeholder {
   padding: 32px 18px;
   color: var(--muted);

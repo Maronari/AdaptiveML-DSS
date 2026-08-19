@@ -17,6 +17,7 @@ class DatasetVersion:
     storage_backend: str = "filesystem"
     bucket: str | None = None
     object_key: str | None = None
+    unit: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataclass into a plain dictionary."""

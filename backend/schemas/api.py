@@ -39,6 +39,7 @@ class TrainRequest(BaseModel):
     records: list[dict[str, Any]]
     training_options: TrainingOptionsRequest = Field(default_factory=TrainingOptionsRequest)
     name: str | None = Field(default=None, max_length=120)
+    unit: str | None = Field(default=None, max_length=40)
 
 
 class RetrainRequest(BaseModel):

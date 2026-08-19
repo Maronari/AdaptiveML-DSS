@@ -1012,6 +1012,101 @@ def test_forecast_returns_extended_recent_history_window(client: TestClient):
     assert len(body["recent_history"]) == 120
 
 
+def test_dataset_inspect_file_suggests_unit_from_unit_column(client: TestClient):
+    frame = pd.DataFrame(build_hourly_energy_dataset())
+    frame["Единица измерения"] = "кВт·ч"
+    csv_payload = frame.to_csv(index=False).encode("utf-8")
+
+    response = client.post(
+        "/datasets/inspect/file",
+        files={"file": ("energy-with-unit.csv", csv_payload, "text/csv")},
+        data={"project_id": "unit-inspect-demo"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["suggested_unit"] == "кВт·ч"
+
+
+def test_forecast_comparison_matches_postfactum_actuals_and_computes_errors(client: TestClient):
+    forecasting_dataset = build_forecasting_dataset()
+
+    train_response = client.post(
+        "/training/run",
+        json={
+            "project_id": "forecast-comparison-demo",
+            "target": "Электропотребление",
+            "records": forecasting_dataset,
+            "unit": "МВт·ч",
+        },
+    )
+    assert train_response.status_code == 200
+    train_body = train_response.json()
+    assert train_body["dataset_version"]["unit"] == "МВт·ч"
+
+    forecast_response = client.post(
+        "/forecast/run",
+        json={
+            "project_id": "forecast-comparison-demo",
+            "horizon_minutes": 60,
+            "steps": 3,
+        },
+    )
+    assert forecast_response.status_code == 200
+    forecast_body = forecast_response.json()
+    assert forecast_body["unit"] == "МВт·ч"
+    run_id = forecast_body["run_id"]
+    forecast_points = forecast_body["forecast"]
+    assert len(forecast_points) == 3
+
+    prediction_0 = float(forecast_points[0]["prediction"])
+    prediction_1 = float(forecast_points[1]["prediction"])
+    actual_0 = prediction_0 + 5.0
+    actual_1 = prediction_1 - 3.25
+
+    postfactum_frame = pd.DataFrame(
+        [
+            {"Дата": forecast_points[0]["timestamp"], "Электропотребление": actual_0},
+            {"Дата": forecast_points[1]["timestamp"], "Электропотребление": actual_1},
+        ]
+    )
+    postfactum_csv = postfactum_frame.to_csv(index=False).encode("utf-8")
+
+    register_response = client.post(
+        "/datasets/register/file",
+        files={"file": ("postfactum.csv", postfactum_csv, "text/csv")},
+        data={"project_id": "forecast-comparison-demo", "target": "Электропотребление"},
+    )
+    assert register_response.status_code == 201
+
+    comparison_response = client.get(f"/forecast/{run_id}/comparison")
+    assert comparison_response.status_code == 200
+    comparison_body = comparison_response.json()
+    assert comparison_body["run_id"] == run_id
+    assert comparison_body["target"] == "Электропотребление"
+    assert comparison_body["unit"] == "МВт·ч"
+
+    points = comparison_body["points"]
+    assert len(points) == 3
+
+    assert points[0]["actual"] == pytest.approx(actual_0)
+    assert points[0]["abs_error"] == pytest.approx(actual_0 - prediction_0, abs=1e-4)
+    expected_mape_0 = abs(actual_0 - prediction_0) / abs(actual_0) * 100.0
+    assert points[0]["mape_percent"] == pytest.approx(expected_mape_0, abs=1e-2)
+
+    assert points[1]["actual"] == pytest.approx(actual_1)
+    assert points[1]["abs_error"] == pytest.approx(actual_1 - prediction_1, abs=1e-4)
+
+    assert points[2]["actual"] is None
+    assert points[2]["abs_error"] is None
+    assert points[2]["mape_percent"] is None
+
+    aggregate = comparison_body["aggregate"]
+    assert aggregate["matched_points"] == 2
+    expected_mean_abs_error = ((actual_0 - prediction_0) + (actual_1 - prediction_1)) / 2
+    assert aggregate["mean_abs_error"] == pytest.approx(expected_mean_abs_error, abs=1e-4)
+    assert aggregate["mean_mape_percent"] is not None
+
+
 def test_retraining_all_history_activates_better_candidate(client: TestClient):
     dataset = build_retraining_dataset()
 
