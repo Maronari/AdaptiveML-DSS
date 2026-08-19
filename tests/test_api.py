@@ -1102,7 +1102,7 @@ def test_forecast_comparison_matches_postfactum_actuals_and_computes_errors(clie
 
     aggregate = comparison_body["aggregate"]
     assert aggregate["matched_points"] == 2
-    expected_mean_abs_error = ((actual_0 - prediction_0) + (actual_1 - prediction_1)) / 2
+    expected_mean_abs_error = (abs(actual_0 - prediction_0) + abs(actual_1 - prediction_1)) / 2
     assert aggregate["mean_abs_error"] == pytest.approx(expected_mean_abs_error, abs=1e-4)
     assert aggregate["mean_mape_percent"] is not None
 

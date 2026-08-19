@@ -327,7 +327,7 @@ class PredictionService:
             return best_value
 
         points: list[dict[str, Any]] = []
-        matched_abs_errors: list[float] = []
+        matched_error_magnitudes: list[float] = []
         matched_mape_values: list[float] = []
 
         for point in run["points"]:
@@ -337,7 +337,7 @@ class PredictionService:
             mape_percent = None
             if actual is not None:
                 abs_error = round(actual - prediction, 6)
-                matched_abs_errors.append(abs_error)
+                matched_error_magnitudes.append(abs(abs_error))
                 if actual != 0:
                     mape_percent = round(abs(actual - prediction) / abs(actual) * 100.0, 4)
                     matched_mape_values.append(mape_percent)
@@ -354,9 +354,11 @@ class PredictionService:
             )
 
         aggregate = {
-            "matched_points": len(matched_abs_errors),
+            "matched_points": len(matched_error_magnitudes),
             "mean_abs_error": (
-                round(sum(matched_abs_errors) / len(matched_abs_errors), 6) if matched_abs_errors else None
+                round(sum(matched_error_magnitudes) / len(matched_error_magnitudes), 6)
+                if matched_error_magnitudes
+                else None
             ),
             "mean_mape_percent": (
                 round(sum(matched_mape_values) / len(matched_mape_values), 4) if matched_mape_values else None
