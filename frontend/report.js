@@ -167,14 +167,23 @@ function buildModelDisplayName(item, detail) {
   const artifacts = detail?.training_artifacts || {};
   const backend = artifacts.backend || "unknown";
   const preset = artifacts.preset || "";
-  const algos = artifacts.training_options?.effective?.algos || [];
+  const composition = artifacts.model_composition || {};
+  const fittedAlgos =
+    composition.source === "fitted" && Array.isArray(composition.algos) && composition.algos.length
+      ? composition.algos
+      : null;
+  const algos = fittedAlgos || artifacts.training_options?.effective?.algos || [];
+  const isFitted = Boolean(fittedAlgos);
 
   const backendLabel = BACKEND_LABELS[backend] || backend;
   const presetLabel = PRESET_LABELS[preset] || preset;
   const algoLabels = algos.map((algo) => ALGO_LABELS[algo] || algo);
 
   if (algoLabels.length && backend === "lightautoml") {
-    return `${backendLabel} / ${presetLabel}: ${algoLabels.join(", ")}`;
+    const algoText = isFitted
+      ? `фактический состав ансамбля: ${algoLabels.join(", ")}`
+      : algoLabels.join(", ");
+    return `${backendLabel} / ${presetLabel}: ${algoText}`;
   }
   return presetLabel ? `${backendLabel} / ${presetLabel}` : backendLabel;
 }

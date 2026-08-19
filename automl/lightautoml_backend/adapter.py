@@ -278,6 +278,12 @@ class TabularAutoMLAdapter:
             reader_params={"advanced_roles": False, "cv": cv_folds},
         )
         automl.fit_predict(train_frame, roles={"target": target}, verbose=0)
+        fitted_algos = self._extract_fitted_composition(automl)
+        model_composition = (
+            {"source": "fitted", "algos": fitted_algos}
+            if fitted_algos
+            else {"source": "requested", "algos": list(options.algos)}
+        )
 
         raw_predictions = automl.predict(x_test).data
         predictions, class_mapping = self._decode_lightautoml_predictions(
@@ -326,6 +332,7 @@ class TabularAutoMLAdapter:
             "class_mapping": class_mapping,
             "preprocessor": preprocessor,
             "forecasting": forecasting_bundle,
+            "model_composition": model_composition,
         }
 
         return TrainingResult(
@@ -455,6 +462,7 @@ class TabularAutoMLAdapter:
             "class_mapping": self._class_mapping(y),
             "preprocessor": tabular_preprocessor,
             "forecasting": forecasting_bundle,
+            "model_composition": {"source": "unavailable", "algos": None},
         }
 
         return TrainingResult(
@@ -624,6 +632,7 @@ class TabularAutoMLAdapter:
     ) -> dict[str, Any]:
         """Persist lightweight training diagnostics next to registry metadata."""
         forecasting = bundle.get("forecasting") or {}
+        model_composition = bundle.get("model_composition") or {"source": "unavailable", "algos": None}
         return {
             "backend": backend_name,
             "preset": bundle.get("preset_name"),
@@ -634,6 +643,10 @@ class TabularAutoMLAdapter:
             "training_sample": list(bundle.get("training_sample") or []),
             "class_mapping": dict(bundle.get("class_mapping") or {}),
             "training_options": training_options,
+            "model_composition": {
+                "source": model_composition.get("source", "unavailable"),
+                "algos": model_composition.get("algos"),
+            },
             "warnings": list(warnings),
             "holdout_rows": len(holdout_predictions),
             "forecasting": {
@@ -769,6 +782,71 @@ class TabularAutoMLAdapter:
             feature: round(max(values.get(feature, 0.0), 0.0) / total, 6)
             for feature in feature_names
         }
+
+    @staticmethod
+    def _extract_fitted_composition(automl) -> list[str] | None:
+        """Introspect a fitted LightAutoML object for the algorithms it actually used.
+
+        LAMA's ``TabularAutoML``/``TabularUtilizedAutoML`` may drop or down-weight
+        algorithms that were requested via ``use_algos`` if they don't fit the time
+        budget. This walks the fitted pipeline structure (``automl.levels`` -> list of
+        ``MLPipeline`` -> ``.ml_algos``) to recover the algorithms genuinely present in
+        the fitted ensemble. Entirely defensive: any failure (API differences across
+        LightAutoML versions, unexpected structure, etc.) simply yields ``None`` so the
+        caller can fall back to the requested algo list.
+        """
+        try:
+            name_fragments = (
+                ("lightgbm", "lgb"),
+                ("catboost", "cb"),
+                ("xgb", "xgb"),
+                ("rfsklearn", "rf"),
+                ("randomforest", "rf"),
+                ("linear", "linear_l2"),
+                ("torch", "nn"),
+                ("neural", "nn"),
+                ("nn", "nn"),
+            )
+
+            def _normalize(raw_name: str) -> str:
+                lowered = raw_name.lower()
+                for fragment, code in name_fragments:
+                    if fragment in lowered:
+                        return code
+                return raw_name
+
+            # TabularUtilizedAutoML wraps several inner TabularAutoML instances; try to
+            # discover them, but always fall back to treating `automl` itself as the
+            # (only) instance to introspect.
+            inner_automls = []
+            for attr_name in ("outer_pipes", "inner_automls", "automls"):
+                candidates = getattr(automl, attr_name, None)
+                if not candidates:
+                    continue
+                for candidate in candidates:
+                    inner = getattr(candidate, "automl", None) or getattr(candidate, "pipeline", None) or candidate
+                    if inner is not None and hasattr(inner, "levels"):
+                        inner_automls.append(inner)
+                if inner_automls:
+                    break
+            if not inner_automls:
+                inner_automls = [automl]
+
+            found: list[str] = []
+            for inner in inner_automls:
+                levels = getattr(inner, "levels", None) or []
+                for level in levels:
+                    for ml_pipeline in level or []:
+                        ml_algos = getattr(ml_pipeline, "ml_algos", None) or []
+                        for algo in ml_algos:
+                            raw_name = getattr(algo, "name", None) or type(algo).__name__
+                            normalized = _normalize(str(raw_name))
+                            if normalized not in found:
+                                found.append(normalized)
+
+            return found or None
+        except Exception:
+            return None
 
     @staticmethod
     def _lightautoml_cv_folds(target: pd.Series, task_type: str) -> int:
