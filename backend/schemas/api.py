@@ -56,6 +56,10 @@ class RenameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class DatasetUnitUpdateRequest(BaseModel):
+    unit: str | None = Field(default=None, max_length=40)
+
+
 class PredictionRequest(BaseModel):
     project_id: str = Field(default="default")
     records: list[dict[str, Any]]

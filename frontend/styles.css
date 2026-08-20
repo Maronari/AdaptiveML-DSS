@@ -1695,6 +1695,28 @@ body.projects-page {
   margin-top: 12px;
 }
 
+.chart-unit-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-accent);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.chart-unit-editor input {
+  min-width: 140px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
 .selected-model-chip {
   display: inline-grid;
   gap: 2px;
@@ -1777,46 +1799,6 @@ body.projects-page {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
-}
-
-.chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chart-legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--ink);
-}
-
-.chart-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.chart-legend-swatch[data-series="actual"] {
-  background: var(--chart-actual);
-}
-
-.chart-legend-swatch[data-series="model"] {
-  background: var(--chart-model);
-}
-
-.chart-legend-swatch[data-series="forecast"] {
-  background: var(--chart-predicted);
-}
-
-.chart-legend-swatch[data-series="postfactum"] {
-  background: var(--chart-postfactum);
 }
 
 .chart-frame {
