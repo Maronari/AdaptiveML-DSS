@@ -79,6 +79,8 @@ const elements = {
   metricsEmpty: document.getElementById("report-metrics-empty"),
   hyperparametersBody: document.getElementById("report-hyperparameters-body"),
   hyperparametersEmpty: document.getElementById("report-hyperparameters-empty"),
+  leaderboardBody: document.getElementById("report-leaderboard-body"),
+  leaderboardEmpty: document.getElementById("report-leaderboard-empty"),
   historySummary: document.getElementById("report-history-summary"),
   historyChart: document.getElementById("report-history-chart"),
   historyBody: document.getElementById("report-history-body"),
@@ -266,6 +268,38 @@ function renderHyperparametersTable(detail) {
     fragment.append(row);
   });
   elements.hyperparametersBody.append(fragment);
+}
+
+function formatWeightPercent(weight) {
+  const numericValue = Number(weight);
+  if (!Number.isFinite(numericValue)) {
+    return "—";
+  }
+  return `${(numericValue * 100).toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+function renderLeaderboardTable(detail) {
+  const leaderboard = detail?.training_artifacts?.model_leaderboard;
+  const entries = Array.isArray(leaderboard) ? leaderboard : [];
+  elements.leaderboardEmpty.hidden = entries.length > 0;
+  elements.leaderboardBody.replaceChildren();
+
+  const fragment = document.createDocumentFragment();
+  entries.forEach((entry, index) => {
+    const row = document.createElement("tr");
+    if (index === 0) {
+      row.className = "primary-row";
+    }
+    const algoLabel = ALGO_LABELS[entry.algo] || entry.algo || entry.model_name || "—";
+    const winnerBadge = index === 0 ? ' <span class="report-status-pill champion">победитель</span>' : "";
+    row.innerHTML = `
+      <td>${escapeHtml(algoLabel)}${winnerBadge}</td>
+      <td>${escapeHtml(String(entry.folds ?? "—"))}</td>
+      <td>${escapeHtml(formatWeightPercent(entry.weight))}</td>
+    `;
+    fragment.append(row);
+  });
+  elements.leaderboardBody.append(fragment);
 }
 
 function formatMetricNumber(value) {
@@ -510,13 +544,16 @@ function renderPage() {
     elements.descriptionBody.innerHTML = renderDescription(state.selectedItem, state.modelDetail, modelName);
     renderMetricsTable(state.modelDetail.metrics, state.modelDetail.primary_metric);
     renderHyperparametersTable(state.modelDetail);
+    renderLeaderboardTable(state.modelDetail);
   } else {
     elements.descriptionBody.innerHTML =
       '<p class="field-note">Данные появятся после выбора проекта и версии модели.</p>';
     elements.metricsBody.replaceChildren();
     elements.hyperparametersBody.replaceChildren();
+    elements.leaderboardBody.replaceChildren();
     elements.metricsEmpty.hidden = false;
     elements.hyperparametersEmpty.hidden = false;
+    elements.leaderboardEmpty.hidden = false;
   }
 
   renderHistorySection();

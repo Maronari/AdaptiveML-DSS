@@ -78,6 +78,28 @@
             </div>
           </div>
 
+          <div class="panel report-leaderboard" id="report-leaderboard-panel">
+            <h3>Сравнение алгоритмов LightAutoML</h3>
+            <p id="report-leaderboard-note" class="field-note">
+              Вклад каждого алгоритма в итоговый ансамбль (вес при блендинге). Победивший алгоритм — с наибольшим весом.
+            </p>
+            <div class="table-shell report-table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Алгоритм</th>
+                    <th>Моделей (фолдов)</th>
+                    <th>Вес в ансамбле</th>
+                  </tr>
+                </thead>
+                <tbody id="report-leaderboard-body"></tbody>
+              </table>
+              <div id="report-leaderboard-empty" class="table-placeholder">
+                Сравнение алгоритмов недоступно для этой версии модели.
+              </div>
+            </div>
+          </div>
+
           <div class="report-columns">
             <div class="panel">
               <h3>Критерии качества модели</h3>
@@ -141,6 +163,6 @@
       </section>
     </main>
 
-    <script type="module" src="./report.js?v=20260820-2200"></script>
+    <script type="module" src="./report.js?v=20260820-2300"></script>
   </body>
 </html>
