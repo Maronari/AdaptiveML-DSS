@@ -189,6 +189,7 @@ function formatTimestamp(value) {
   return date.toLocaleString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: includeSeconds ? "2-digit" : undefined,
@@ -968,10 +969,17 @@ function updateSidebarInfo() {
     return;
   }
 
+  const recentHistory = Array.isArray(state.forecast?.recent_history) ? state.forecast.recent_history : [];
+  const anchorTimestamp = recentHistory.length ? recentHistory[recentHistory.length - 1]?.timestamp : null;
+  const anchorNote = anchorTimestamp
+    ? ` Прогноз считается от последней точки обучающих данных модели — ${formatTimestamp(anchorTimestamp)} — а не от сегодняшней даты.`
+    : "";
+
   const autoNote =
     `Интервал вперёд ${formatDuration(state.request.totalMinutes)}. ` +
     `Точек ${state.request.pointCount}, шаг отображения ${formatDuration(state.request.displayStepMinutes)}, ` +
-    `нативный шаг модели ${formatDuration(state.request.baseFrequencyMinutes)}.`;
+    `нативный шаг модели ${formatDuration(state.request.baseFrequencyMinutes)}.` +
+    anchorNote;
   elements.forecastPanelTitle.textContent = `Точки прогноза ${state.model.version_id}`;
   elements.forecastPanelNote.textContent = autoNote;
 }
