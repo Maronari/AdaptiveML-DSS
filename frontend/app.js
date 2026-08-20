@@ -50,6 +50,9 @@ const elements = {
   chartTitle: document.getElementById("chart-title"),
   chartRangeNote: document.getElementById("chart-range-note"),
   chartResetButton: document.getElementById("chart-reset-button"),
+  chartUnitEditor: document.getElementById("chart-unit-editor"),
+  chartUnitInput: document.getElementById("chart-unit-input"),
+  chartUnitSaveButton: document.getElementById("chart-unit-save"),
   selectedModelSummary: document.getElementById("selected-model-summary"),
   selectedModelVersion: document.getElementById("selected-model-version"),
   selectedModelStatus: document.getElementById("selected-model-status"),
@@ -265,6 +268,32 @@ function updateSelectedModelSummary() {
   elements.selectedModelTarget.textContent = state.model.target || "—";
   elements.selectedModelMetric.textContent = formatPrimaryMetric(state.model);
   elements.selectedModelSummary.hidden = false;
+}
+
+function updateUnitEditor() {
+  const hasDataset = Boolean(state.model?.dataset_version_id);
+  const hasUnit = Boolean(state.forecast?.unit);
+  elements.chartUnitEditor.hidden = !state.forecast || !hasDataset || hasUnit;
+}
+
+async function handleSaveUnit() {
+  const unit = elements.chartUnitInput.value.trim();
+  const datasetVersionId = state.model?.dataset_version_id;
+  if (!unit || !datasetVersionId) {
+    return;
+  }
+
+  elements.chartUnitSaveButton.disabled = true;
+  try {
+    await patchJson(`/datasets/${encodeURIComponent(datasetVersionId)}/unit`, { unit });
+    elements.chartUnitInput.value = "";
+    await loadForecast(state.selectedIntervalMinutes, state.selectedPointCount, { resetZoom: false });
+  } catch (error) {
+    state.error = error instanceof Error ? error.message : String(error);
+    renderAll();
+  } finally {
+    elements.chartUnitSaveButton.disabled = false;
+  }
 }
 
 function renderMetricGrid(container, metrics) {
@@ -854,6 +883,26 @@ async function fetchJson(url) {
   return payload;
 }
 
+async function patchJson(url, body) {
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "detail" in payload ? payload.detail : response.statusText;
+    throw new Error(message || "Ошибка запроса.");
+  }
+
+  return payload;
+}
+
 async function resolveDefaultProjectId() {
   try {
     const payload = await fetchJson("/projects");
@@ -1196,7 +1245,7 @@ function drawForecastChart() {
       { label: "История", color: theme.actual },
       { label: "Модель", color: theme.model },
       { label: "Прогноз", color: theme.predicted },
-      ...(hasPostfactumSeries ? [{ label: "Факт (после прогноза)", color: theme.model }] : []),
+      ...(hasPostfactumSeries ? [{ label: "Факт (после прогноза)", color: theme.postfactum }] : []),
     ],
     theme,
   );
@@ -1437,6 +1486,7 @@ function renderChart() {
 function renderAll() {
   updateSelectedModelSummary();
   updateMetricsSummary();
+  updateUnitEditor();
   setInteractiveState();
   updateSidebarInfo();
   renderPredictionTable();
@@ -1726,6 +1776,17 @@ function handleResize() {
 elements.chartResetButton.addEventListener("click", () => {
   resetViewport();
   scheduleChartRender();
+});
+
+elements.chartUnitSaveButton.addEventListener("click", () => {
+  handleSaveUnit();
+});
+
+elements.chartUnitInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    handleSaveUnit();
+  }
 });
 
 elements.intervalSlider.addEventListener("input", () => {

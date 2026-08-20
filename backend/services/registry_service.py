@@ -72,6 +72,21 @@ class RegistryService:
                 return dataset
         raise ValueError(f"Dataset version '{version_id}' was not found.")
 
+    def update_dataset_unit(self, version_id: str, unit: str | None) -> dict[str, Any]:
+        """Update the measurement unit of an existing dataset version in place.
+
+        Lets a dataset that was registered before the unit field existed (or without
+        one filled in) be corrected without re-uploading or retraining, so forecasts
+        already built on it can pick up the unit immediately.
+        """
+        datasets = self.registry.read("datasets")
+        for dataset in datasets:
+            if dataset["version_id"] == version_id:
+                dataset["unit"] = self._clean_name(unit)
+                self.registry.write("datasets", datasets)
+                return dataset
+        raise ValueError(f"Dataset version '{version_id}' was not found.")
+
     @staticmethod
     def _clean_name(name: str | None) -> str | None:
         """Normalize a user-supplied display name, treating blanks as unset."""

@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AdaptiveML DSS</title>
-    <link rel="stylesheet" href="./styles.css?v=20260820-2200" />
-    <link rel="stylesheet" href="./prototype-theme.css?v=20260820-2200" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-2330" />
+    <link rel="stylesheet" href="./prototype-theme.css?v=20260820-2330" />
   </head>
   <body class="graph-page">
     <main class="page-shell graph-shell">
@@ -91,12 +91,13 @@
                 <p id="chart-range-note" class="chart-range-note">
                   Страница показывает историю и прогноз выбранной версии модели.
                 </p>
-                <ul class="chart-legend">
-                  <li><span class="chart-legend-swatch" data-series="actual"></span>История (факт)</li>
-                  <li><span class="chart-legend-swatch" data-series="model"></span>Модель (на истории)</li>
-                  <li><span class="chart-legend-swatch" data-series="forecast"></span>Прогноз</li>
-                  <li><span class="chart-legend-swatch" data-series="postfactum"></span>Факт (после прогноза)</li>
-                </ul>
+                <div id="chart-unit-editor" class="chart-unit-editor" hidden>
+                  <span>Единица измерения не указана для датасета этой модели.</span>
+                  <input id="chart-unit-input" type="text" maxlength="40" placeholder="Например: МВт·ч" />
+                  <button type="button" id="chart-unit-save" class="button button-secondary button-compact">
+                    Сохранить
+                  </button>
+                </div>
                 <div id="selected-model-summary" class="selected-model-summary" hidden>
                   <span class="selected-model-chip">
                     <strong>Версия</strong>
@@ -149,6 +150,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260820-2200"></script>
+    <script type="module" src="./app.js?v=20260820-2330"></script>
   </body>
 </html>

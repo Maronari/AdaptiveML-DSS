@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from backend.schemas.api import (
+    DatasetUnitUpdateRequest,
     DatasetValidationRequest,
     DecisionForecastRequest,
     DecisionRequest,
@@ -201,6 +202,15 @@ def rename_dataset(version_id: str, payload: RenameRequest) -> dict[str, Any]:
     """Rename an existing dataset version."""
     try:
         return registry_service.rename_dataset_version(version_id, payload.name)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.patch("/datasets/{version_id}/unit", tags=["datasets"])
+def update_dataset_unit(version_id: str, payload: DatasetUnitUpdateRequest) -> dict[str, Any]:
+    """Set or correct the measurement unit of an already-registered dataset version."""
+    try:
+        return registry_service.update_dataset_unit(version_id, payload.unit)
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
