@@ -284,6 +284,7 @@ class TabularAutoMLAdapter:
             if fitted_algos
             else {"source": "requested", "algos": list(options.algos)}
         )
+        model_leaderboard = self._extract_blend_leaderboard(automl)
 
         raw_predictions = automl.predict(x_test).data
         predictions, class_mapping = self._decode_lightautoml_predictions(
@@ -333,6 +334,7 @@ class TabularAutoMLAdapter:
             "preprocessor": preprocessor,
             "forecasting": forecasting_bundle,
             "model_composition": model_composition,
+            "model_leaderboard": model_leaderboard,
         }
 
         return TrainingResult(
@@ -463,6 +465,7 @@ class TabularAutoMLAdapter:
             "preprocessor": tabular_preprocessor,
             "forecasting": forecasting_bundle,
             "model_composition": {"source": "unavailable", "algos": None},
+            "model_leaderboard": None,
         }
 
         return TrainingResult(
@@ -647,6 +650,7 @@ class TabularAutoMLAdapter:
                 "source": model_composition.get("source", "unavailable"),
                 "algos": model_composition.get("algos"),
             },
+            "model_leaderboard": bundle.get("model_leaderboard"),
             "warnings": list(warnings),
             "holdout_rows": len(holdout_predictions),
             "forecasting": {
@@ -783,8 +787,29 @@ class TabularAutoMLAdapter:
             for feature in feature_names
         }
 
-    @staticmethod
-    def _extract_fitted_composition(automl) -> list[str] | None:
+    _ALGO_NAME_FRAGMENTS = (
+        ("lightgbm", "lgb"),
+        ("catboost", "cb"),
+        ("xgb", "xgb"),
+        ("rfsklearn", "rf"),
+        ("randomforest", "rf"),
+        ("linear", "linear_l2"),
+        ("torch", "nn"),
+        ("neural", "nn"),
+        ("nn", "nn"),
+    )
+
+    @classmethod
+    def _normalize_algo_name(cls, raw_name: str) -> str:
+        """Map a raw LightAutoML model/algo class name to the app's short algo vocabulary."""
+        lowered = raw_name.lower()
+        for fragment, code in cls._ALGO_NAME_FRAGMENTS:
+            if fragment in lowered:
+                return code
+        return raw_name
+
+    @classmethod
+    def _extract_fitted_composition(cls, automl) -> list[str] | None:
         """Introspect a fitted LightAutoML object for the algorithms it actually used.
 
         LAMA's ``TabularAutoML``/``TabularUtilizedAutoML`` may drop or down-weight
@@ -796,25 +821,6 @@ class TabularAutoMLAdapter:
         caller can fall back to the requested algo list.
         """
         try:
-            name_fragments = (
-                ("lightgbm", "lgb"),
-                ("catboost", "cb"),
-                ("xgb", "xgb"),
-                ("rfsklearn", "rf"),
-                ("randomforest", "rf"),
-                ("linear", "linear_l2"),
-                ("torch", "nn"),
-                ("neural", "nn"),
-                ("nn", "nn"),
-            )
-
-            def _normalize(raw_name: str) -> str:
-                lowered = raw_name.lower()
-                for fragment, code in name_fragments:
-                    if fragment in lowered:
-                        return code
-                return raw_name
-
             # TabularUtilizedAutoML wraps several inner TabularAutoML instances; try to
             # discover them, but always fall back to treating `automl` itself as the
             # (only) instance to introspect.
@@ -840,11 +846,54 @@ class TabularAutoMLAdapter:
                         ml_algos = getattr(ml_pipeline, "ml_algos", None) or []
                         for algo in ml_algos:
                             raw_name = getattr(algo, "name", None) or type(algo).__name__
-                            normalized = _normalize(str(raw_name))
+                            normalized = cls._normalize_algo_name(str(raw_name))
                             if normalized not in found:
                                 found.append(normalized)
 
             return found or None
+        except Exception:
+            return None
+
+    @classmethod
+    def _extract_blend_leaderboard(cls, automl) -> list[dict] | None:
+        """Extract the final blend's winning algorithm and per-algorithm comparison.
+
+        LAMA's own ``TabularAutoML.create_model_str_desc()`` builds a human-readable
+        string from ``automl.collect_model_stats()`` (model name -> averaged fold count)
+        paired with ``automl.blender.wts`` (the ``WeightedBlender`` weight for each model
+        on the final level). This replicates that same pairing to get structured data
+        instead of a formatted string, so the report can show which algorithm actually
+        "won" (highest blend weight) and how the others compare. Entirely defensive:
+        LightAutoML internals differ across versions/presets (e.g. ``TabularUtilizedAutoML``
+        may not expose ``collect_model_stats``/``blender`` directly), so any failure
+        simply yields ``None`` and the caller falls back to the plain composition list.
+        """
+        try:
+            model_stats = sorted(automl.collect_model_stats().items())
+            if not model_stats:
+                return None
+
+            last_level = model_stats[-1][0].split("_")[1]
+            last_level_models = [stat for stat in model_stats if stat[0].startswith(f"Lvl_{last_level}")]
+
+            weights = getattr(getattr(automl, "blender", None), "wts", None)
+            if weights is None or len(weights) != len(last_level_models):
+                weights = [None] * len(last_level_models)
+
+            leaderboard = []
+            for (model_name, folds), weight in zip(last_level_models, weights):
+                raw_algo = model_name.rsplit("_", 1)[-1]
+                leaderboard.append(
+                    {
+                        "model_name": model_name,
+                        "algo": cls._normalize_algo_name(raw_algo),
+                        "folds": int(folds),
+                        "weight": round(float(weight), 6) if weight is not None else None,
+                    }
+                )
+
+            leaderboard.sort(key=lambda entry: (entry["weight"] is None, -(entry["weight"] or 0.0)))
+            return leaderboard or None
         except Exception:
             return None
 
