@@ -21,6 +21,7 @@
   --chart-actual: #324661;
   --chart-predicted: #3f7cff;
   --chart-model: #da8b2b;
+  --chart-postfactum: #c0392b;
   --chart-forecast: #3f7cff;
   --chart-matrix-rgb: 63, 124, 255;
   --header-bar: linear-gradient(135deg, #365fcb 0%, #4e84f5 58%, #6a9cff 100%);
@@ -1596,6 +1597,23 @@ body.projects-page {
   background: rgba(244, 247, 252, 0.72);
 }
 
+/* The prediction table lives in a narrow sidebar (graph.html) with 6 columns
+   (Шаг/Время/Прогноз/Факт/Абс. ошибка/MAPE) — the generic .table-shell rules
+   above force a 720px min-width and nowrap cells, which pushed the Факт,
+   Абс. ошибка and MAPE columns out of view behind a horizontal scrollbar.
+   These combined-class overrides win on specificity and let the table shrink
+   and wrap to fit the sidebar instead. */
+.prediction-table-shell.table-shell table {
+  min-width: 0;
+  table-layout: auto;
+}
+
+.prediction-table-shell.table-shell th,
+.prediction-table-shell.table-shell td {
+  white-space: normal;
+  padding: 8px 6px;
+}
+
 .table-shell tbody tr.is-aggregate-row,
 .prediction-table-shell tbody tr.is-aggregate-row {
   font-weight: 600;
@@ -1759,6 +1777,46 @@ body.projects-page {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.chart-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.chart-legend-swatch[data-series="actual"] {
+  background: var(--chart-actual);
+}
+
+.chart-legend-swatch[data-series="model"] {
+  background: var(--chart-model);
+}
+
+.chart-legend-swatch[data-series="forecast"] {
+  background: var(--chart-predicted);
+}
+
+.chart-legend-swatch[data-series="postfactum"] {
+  background: var(--chart-postfactum);
 }
 
 .chart-frame {

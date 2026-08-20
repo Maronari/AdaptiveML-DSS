@@ -146,6 +146,7 @@ function getChartTheme() {
     actual: getThemeValue("--chart-actual", "#324661"),
     predicted: getThemeValue("--chart-predicted", "#3f7cff"),
     model: getThemeValue("--chart-model", "#da8b2b"),
+    postfactum: getThemeValue("--chart-postfactum", "#c0392b"),
     divider: getThemeValue("--line-strong", "rgba(50, 70, 97, 0.28)"),
   };
   return chartState.theme;
@@ -1352,7 +1353,7 @@ function drawForecastChart() {
         ? modelPoints[modelPoints.length - 1]
         : null;
   drawSeries(forecastPoints, theme.predicted, true, bridgePoint);
-  drawSeries(postfactumPoints, theme.model);
+  drawSeries(postfactumPoints, theme.postfactum);
 
   chartState.renderedPoints = pointLayouts;
   const hoveredPoint = pointLayouts.find((point) => point.pointId === chartState.hoverPointId) || null;
@@ -1363,7 +1364,7 @@ function drawForecastChart() {
   drawPointMarkers(context, historyPoints, theme.actual, 2.75);
   drawPointMarkers(context, modelPoints, theme.model, 2.75);
   drawPointMarkers(context, forecastPoints, theme.predicted, 3);
-  drawPointMarkers(context, postfactumPoints, theme.model, 3);
+  drawPointMarkers(context, postfactumPoints, theme.postfactum, 3);
 
   context.fillStyle = theme.text;
   setChartFont(context, 11, 600);
