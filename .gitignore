@@ -1,5 +1,8 @@
 storage/registry.sqlite3
 
+# Local Claude settings
+.claude/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
