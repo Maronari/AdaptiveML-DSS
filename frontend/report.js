@@ -339,10 +339,11 @@ function buildHistorySvg(points) {
   }
 
   const width = 760;
-  const height = 220;
-  const paddingX = 20;
+  const height = 250;
+  const paddingX = 48;
   const paddingTop = 26;
-  const paddingBottom = 30;
+  const paddingBottom = 52;
+  const metricLabel = (points[0].primaryMetric || "rmse").toUpperCase();
   const values = points.map((point) => point.value);
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
@@ -384,7 +385,10 @@ function buildHistorySvg(points) {
       <text x="${paddingX}" y="${height - paddingBottom - 6}" class="report-history-value-label">${escapeHtml(formatMetricNumber(minValue))}</text>
       <polyline points="${linePoints}" class="report-history-line" fill="none" />
       ${circles}
+      <text x="${width / 2}" y="${height - 7}" class="report-history-value-label" text-anchor="middle">Дата и время</text>
+      <text transform="translate(14 ${(paddingTop + height - paddingBottom) / 2}) rotate(-90)" class="report-history-value-label" text-anchor="middle">${escapeHtml(metricLabel)}</text>
     </svg>
+    <p class="field-note">Крупная синяя точка — Champion: лучшая версия модели по основной метрике качества, используемая для прогнозов по умолчанию.</p>
   `;
 }
 

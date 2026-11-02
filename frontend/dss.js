@@ -370,7 +370,7 @@ function renderForecastTable() {
   const columns = ["step", "timestamp", "prediction"];
   const labels = {
     step: "Шаг",
-    timestamp: "Время прогноза",
+    timestamp: "Время",
     prediction: "Прогноз",
   };
   const headRow = document.createElement("tr");
@@ -394,7 +394,7 @@ function renderForecastTable() {
     row.append(timestampCell);
 
     const predictionCell = document.createElement("td");
-    predictionCell.textContent = formatNumber(record.prediction, 6);
+    predictionCell.textContent = formatNumber(record.prediction, 2);
     row.append(predictionCell);
 
     fragment.append(row);
@@ -425,13 +425,17 @@ function renderResults() {
       <div class="dss-result-head">
         <div>
           <strong>Шаг ${escapeHtml(item.step ?? item.row_index ?? "—")} · ${escapeHtml(formatDateTime(item.timestamp))}</strong>
-          <p>${escapeHtml(recommendation.summary || "Рекомендация сформирована.")}</p>
+          <p>${escapeHtml(({
+            "Forecasted point exceeds the acceptable envelope and requires proactive load mitigation.": "Снизить нагрузку до наступления пика.",
+            "Forecasted point is trending upward and should be routed to capacity reallocation.": "Подготовить перераспределение нагрузки.",
+            "Forecasted point can remain under observation.": "Продолжить наблюдение."
+          })[recommendation.summary] || recommendation.summary || "Рекомендация сформирована.")}</p>
         </div>
-        <span class="dss-risk-pill risk-${escapeHtml(recommendation.risk_level || "unknown")}">${escapeHtml(recommendation.risk_level || "unknown")}</span>
+        <span class="dss-risk-pill risk-${escapeHtml(recommendation.risk_level || "unknown")}">${escapeHtml(({high: "Высокий риск", medium: "Средний риск", low: "Низкий риск"})[recommendation.risk_level] || "Риск не определён")}</span>
       </div>
       <div class="dss-result-metrics">
-        <span><strong>Prediction:</strong> ${formatNumber(item.prediction, 6)}</span>
-        <span><strong>Confidence:</strong> ${formatNumber(item.confidence, 4)}</span>
+        <span><strong>Прогноз:</strong> ${formatNumber(item.prediction, 2)}</span>
+        <span><strong>Уверенность:</strong> ${formatNumber(item.confidence, 4)}</span>
       </div>
       <div class="dss-result-block">
         <strong>Действия</strong>
@@ -446,10 +450,10 @@ function renderResults() {
         </ul>
       </div>
       <div class="dss-result-block">
-        <strong>Топ-факторы прогноза</strong>
+        <strong>Факторы прогноза</strong>
         <div class="dss-factor-list">
           ${factors.map((factor) => `
-            <span class="dss-factor-chip">${escapeHtml(factor.feature || "factor")}: ${formatNumber(factor.impact_score, 4)}</span>
+            <span class="dss-factor-chip">${escapeHtml(factor.feature || "factor")}: ${formatNumber(factor.impact_score, 2)}</span>
           `).join("") || '<span class="dss-factor-chip">—</span>'}
         </div>
       </div>
@@ -470,9 +474,10 @@ function renderPage() {
   elements.datasetId.textContent = state.datasetSummary?.dataset_version?.version_id || "—";
   elements.modelId.textContent = state.modelSummary
     ? state.modelSummary.name
-      ? `${state.modelSummary.name} (${state.modelSummary.version_id})`
+      ? state.modelSummary.name
       : state.modelSummary.version_id
     : "—";
+  elements.modelId.title = state.modelSummary?.version_id || "";
   elements.target.textContent = state.datasetSummary?.target || state.modelSummary?.target || "—";
   syncRequestInputs();
 
@@ -491,9 +496,9 @@ function renderPage() {
   } else {
     const warning = state.forecastPreview?.warning;
     elements.projectNote.textContent =
-      `СППР использует ту же версию модели, что и график: ${state.modelSummary.version_id}.`;
+      `Модель: ${state.modelSummary.name || state.modelSummary.version_id}.`;
     elements.actionNote.textContent =
-      `Интервал вперёд ${formatDuration(state.request.totalMinutes)}. Точек ${state.request.pointCount}, шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг модели ${formatDuration(state.request.baseFrequencyMinutes)}.${warning ? ` ${warning}` : ""}`;
+      `${formatDuration(state.request.totalMinutes)} · ${state.request.pointCount} точек · шаг ${formatDuration(state.request.displayStepMinutes)}.${warning ? ` ${warning}` : ""}`;
   }
 
   const disabled = state.busy || !state.modelSummary?.forecasting?.available;
@@ -688,9 +693,9 @@ async function runDecision() {
       }),
     });
     state.recommendations = Array.isArray(payload.recommendations) ? payload.recommendations : [];
-    elements.resultsTitle.textContent = `Результаты СППР ${payload.model_version || ""}`.trim();
+    elements.resultsTitle.textContent = `Результаты СППР ${state.modelSummary?.name || payload.model_version || ""}`.trim();
     elements.resultsNote.textContent =
-      `Получено рекомендаций: ${state.recommendations.length}. Последний факт: ${formatNumber(payload.baseline?.last_actual, 6)}, P90 истории: ${formatNumber(payload.baseline?.recent_p90, 6)}.`;
+      `Получено рекомендаций: ${state.recommendations.length}. Последний факт: ${formatNumber(payload.baseline?.last_actual, 2)}, P90 истории: ${formatNumber(payload.baseline?.recent_p90, 2)}.`;
     setStatus("success", `СППР завершён: ${state.recommendations.length} рекомендаций по прогнозу.`);
   } catch (error) {
     state.recommendations = [];

@@ -1,0 +1,9 @@
+.dss-page .dss-result-head strong, .dss-page .dss-result-block > strong { font-size: 22px; }
+.dss-page .dss-result-head p, .dss-page .dss-result-metrics, .dss-page .dss-result-list { font-size: 20px; line-height: 1.5; }
+.dss-page .dss-factor-chip, .dss-page .dss-risk-pill { font-size: 17px; line-height: 1.4; }
+.graph-page .graph-metric-chip-label, .graph-page .graph-metrics-head strong { font-size: 16px; }
+.graph-page .graph-metric-chip strong { font-size: 20px; }
+.graph-page .prediction-table-shell td, .dss-page .dss-sample-shell td { font-size: 18px; }
+.graph-page .prediction-table-shell th, .dss-page .dss-sample-shell th { font-size: 15px; letter-spacing: normal; }
+
+.graph-page .graph-metric-chip strong, .dss-page .dss-factor-chip { overflow-wrap: anywhere; }

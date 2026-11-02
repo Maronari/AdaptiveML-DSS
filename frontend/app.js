@@ -156,6 +156,7 @@ function getChartTheme() {
 }
 
 function setChartFont(context, size = 12, weight = 400) {
+  size = Math.max(18, size);
   context.font = `${weight} ${size}px "Aptos", "Segoe UI Variable Text", "Trebuchet MS", sans-serif`;
 }
 
@@ -263,8 +264,9 @@ function updateSelectedModelSummary() {
   }
 
   elements.selectedModelVersion.textContent = state.model.name
-    ? `${state.model.name} (${state.model.version_id})`
+    ? state.model.name
     : state.model.version_id || "—";
+  elements.selectedModelVersion.title = state.model.version_id || "";
   elements.selectedModelStatus.textContent = state.model.status || "—";
   elements.selectedModelTarget.textContent = state.model.target || "—";
   elements.selectedModelMetric.textContent = formatPrimaryMetric(state.model);
@@ -593,7 +595,7 @@ function isViewportReset() {
 }
 
 function getPlotBounds(width, height) {
-  return { top: 52, right: width - 26, bottom: height - 68, left: 72 };
+  return { top: width < 400 ? 120 : width < 800 ? 84 : 60, right: width - 64, bottom: height - 60, left: 100 };
 }
 
 function getPointId(point) {
@@ -1021,17 +1023,8 @@ function updateSidebarInfo() {
 
   const recentHistory = Array.isArray(state.forecast?.recent_history) ? state.forecast.recent_history : [];
   const anchorTimestamp = recentHistory.length ? recentHistory[recentHistory.length - 1]?.timestamp : null;
-  const anchorNote = anchorTimestamp
-    ? ` Прогноз считается от последней точки обучающих данных модели — ${formatTimestamp(anchorTimestamp)} — а не от сегодняшней даты.`
-    : "";
-
-  const autoNote =
-    `Интервал вперёд ${formatDuration(state.request.totalMinutes)}. ` +
-    `Точек ${state.request.pointCount}, шаг отображения ${formatDuration(state.request.displayStepMinutes)}, ` +
-    `нативный шаг модели ${formatDuration(state.request.baseFrequencyMinutes)}.` +
-    anchorNote;
-  elements.forecastPanelTitle.textContent = `Точки прогноза ${state.model.version_id}`;
-  elements.forecastPanelNote.textContent = autoNote;
+  elements.forecastPanelTitle.textContent = "Точки прогноза";
+  elements.forecastPanelNote.textContent = `${formatDuration(state.request.totalMinutes)} · ${state.request.pointCount} точек · шаг ${formatDuration(state.request.displayStepMinutes)}.${anchorTimestamp ? ` Отсчёт от ${formatTimestamp(anchorTimestamp)}.` : ""}`;
 }
 
 function getCanvasHeight(canvas, fallbackHeight = DEFAULT_CHART_HEIGHT) {
@@ -1086,10 +1079,15 @@ function drawAxes(context, bounds, theme) {
 
 function drawLegend(context, entries, theme) {
   let x = 28;
-  const y = 24;
+  let y = 24;
+  const legendWidth = context.canvas.getBoundingClientRect().width;
   setChartFont(context, 12, 500);
 
   for (const entry of entries) {
+    if (x > 28 && x + context.measureText(entry.label).width + 22 > legendWidth - 20) {
+      x = 28;
+      y += 28;
+    }
     context.fillStyle = entry.color;
     context.fillRect(x, y - 10, 16, 8);
     x += 22;
@@ -1251,11 +1249,6 @@ function drawForecastChart() {
     theme,
   );
 
-  if (unit) {
-    context.fillStyle = theme.label;
-    setChartFont(context, 10, 500);
-    context.fillText(unit, 10, bounds.top - 6);
-  }
 
   for (let tick = 0; tick <= 4; tick += 1) {
     const ratio = tick / 4;
@@ -1272,7 +1265,7 @@ function drawForecastChart() {
     context.fillText(formatNumber(value), 10, y + 4);
   }
 
-  const xTicks = buildXAxisTicks(visibleSlice.rows, width < 900 ? 4 : 6);
+  const xTicks = buildXAxisTicks(visibleSlice.rows, Math.max(2, Math.min(6, Math.floor(plotWidth / 145))));
   xTicks.forEach(({ index, item }) => {
     const x = bounds.left + (plotWidth * index) / Math.max(visibleSlice.rows.length - 1, 1);
 
@@ -1295,9 +1288,9 @@ function drawForecastChart() {
     context.fillText(timeLabel, x - timeWidth / 2, bounds.bottom + 22);
 
     setChartFont(context, 10, 400);
-    const dateLabel = formatAxisDate(item.timestamp);
+    const dateLabel = width < 500 ? formatAxisDate(item.timestamp).split(".").slice(0, 2).join(".") : formatAxisDate(item.timestamp);
     const dateWidth = context.measureText(dateLabel).width;
-    context.fillText(dateLabel, x - dateWidth / 2, bounds.bottom + 38);
+    context.fillText(dateLabel, x - dateWidth / 2, bounds.bottom + 46);
   });
 
   const getPointX = (index) =>
@@ -1424,27 +1417,15 @@ function drawForecastChart() {
   drawPointMarkers(context, forecastPoints, theme.predicted, 3);
   drawPointMarkers(context, postfactumPoints, theme.postfactum, 3);
 
-  context.fillStyle = theme.text;
-  setChartFont(context, 11, 600);
-  const zoomText = `Масштаб: ${visibleSlice.zoomLevel}x`;
-  context.fillText(zoomText, bounds.right - context.measureText(zoomText).width, bounds.top - 16);
 
   const zoomEnabled = timelineRows.length > MIN_VISIBLE_POINTS;
-  const modelLabel = state.model.name ? `${state.model.name} (${state.model.version_id})` : state.model.version_id;
-  const baseText = `Проект ${state.model.project_id}, версия ${modelLabel}, цель ${state.model.target}.`;
-  const rangeText =
-    ` Интервал ${formatDuration(state.request.totalMinutes)}, точек ${state.request.pointCount}, ` +
-    `шаг отображения ${formatDuration(state.request.displayStepMinutes)}, нативный шаг ${formatDuration(state.request.baseFrequencyMinutes)}.`;
   const modelText = modelPoints.length
     ? ``
     : ` Исторические точки модели недоступны для этой версии, поэтому на графике показан прогнозный хвост.`;
-  const interactionText = zoomEnabled
-    ? " Колесо мыши масштабирует график, перетаскивание двигает окно влево и вправо, наведение показывает значение точки."
-    : " Наведите на точку, чтобы увидеть значение.";
 
-  elements.chartTitle.textContent = unit ? `Прогноз модели ${modelLabel}, ${unit}` : `Прогноз модели ${modelLabel}`;
+  elements.chartTitle.textContent = `Прогноз: ${state.model.name || state.model.version_id}${unit ? `, ${unit}` : ""}`;
   updateChartControls(
-    `${baseText}${rangeText}${modelText}${interactionText}`,
+    `Колесо — масштаб. Перетаскивание — сдвиг. Наведение — значение.${modelText}`,
     zoomEnabled && !isViewportReset(),
     zoomEnabled,
   );
