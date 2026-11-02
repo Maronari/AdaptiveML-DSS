@@ -1,0 +1,106 @@
+/* AutoML: analytical workstation.
+ * Design pass informed by unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
+ */
+:root {
+  --bg: #f5f6f8;
+  --bg-paper: #f5f6f8;
+  --surface: #fff;
+  --surface-soft: #f7f8fa;
+  --surface-accent: #eef3fc;
+  --ink: #343c49;
+  --ink-strong: #202733;
+  --muted: #626d7b;
+  --line: #dfe3e8;
+  --line-strong: #cbd2dc;
+  --accent: #285bb5;
+  --accent-strong: #204b96;
+  --shadow: 0 1px 2px rgb(20 28 40 / 4%);
+  --header-bar: #fff;
+  --header-bar-text: #202733;
+  --header-bar-muted: #626d7b;
+  --chart-actual: #626d7b;
+  --chart-predicted: #285bb5;
+  --chart-forecast: #285bb5;
+  --chart-grid: #e9ecf0;
+  --chart-label: #626d7b;
+  --chart-text: #202733;
+}
+body.training-page, body.graph-page {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Segoe UI', sans-serif;
+  padding: 0 24px 24px;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+}
+body .app-header {
+  background: var(--bg);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 16px 0;
+  gap: 24px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body .app-header-copy h1 { color: var(--ink-strong); font-size: 24px; font-weight: 500; line-height: 1.25; }
+body .app-header-copy { gap: 8px; }
+body .page-subtitle { color: var(--muted); font-size: 14px; line-height: 1.5; }
+body .page-actions { gap: 4px; }
+body .app-header .page-actions .button { min-height: 36px; min-width: 0; padding: 8px 12px; }
+body.training-page .app-header .button-secondary, body.graph-page .app-header .button-secondary { background: transparent; border: 1px solid transparent; color: var(--muted); box-shadow: none; backdrop-filter: none; }
+body .app-header .button-secondary:hover { background: #e9ecf0; color: var(--ink-strong); border-color: transparent; }
+body.training-page .app-header .button-primary, body.graph-page .app-header .button-primary { color: var(--accent-strong); background: #e6ecf5; border: 1px solid #cbd7eb; box-shadow: none; }
+body .app-header .button-primary:hover { background: #dce5f3; }
+body .workspace-board { padding: 16px; gap: 16px; background: #eef0f3; border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
+body .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; }
+body .training-panel-compact, body .graph-sidebar, body .graph-main-panel { padding: 24px; gap: 16px; }
+body .training-form-grid, body .training-panel-head { gap: 16px; }
+body .panel-heading h2, body .graph-sidebar-head h2, body .chart-toolbar-copy h2 { font-family: inherit; font-size: 20px; font-weight: 500; letter-spacing: 0; color: var(--ink-strong); }
+body .eyebrow, body .training-job-label, body .job-status-pill, body .table-shell th { text-transform: none; letter-spacing: 0; font-weight: 500; }
+body .eyebrow { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+body .field input, body .field select { min-height: 44px; padding: 12px; background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink-strong); }
+body .toggle, body .algo-chip { min-height: 44px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+body .toggle:has(input:checked), body .algo-chip:has(input:checked) { background: #f1f5fb; border-color: #9db4db; }
+body .button, body .btn { border-radius: 8px; font-weight: 500; transition: background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out; }
+body .button-primary, body .btn:not(.secondary):not(.danger) { background: var(--accent); color: #fff; box-shadow: none; }
+body .button-primary:hover, body .btn:not(.secondary):not(.danger):hover { background: var(--accent-strong); transform: none; }
+body .range-control, body .chart-frame, body .table-shell, body .training-log { background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: none; }
+body .chart-frame::before { background: none; }
+body .table-shell thead th { background: #f5f6f8; color: var(--muted); }
+body .table-shell td { font-variant-numeric: tabular-nums; }
+body .graph-metric-chip strong, body .dss-summary-card strong { font-variant-numeric: tabular-nums; font-weight: 500; }
+body .graph-metric-chip, body .dss-summary-card { background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px; box-shadow: none; }
+body .status-banner { border-width: 1px; padding: 12px 16px; border-radius: 8px; }
+body .project-id, body .project-state { border-radius: 4px; padding: 4px 8px; min-height: 24px; font-weight: 400; }
+body.projects-page .page-status { margin: 0; }
+body.projects-page .container { width: 100%; padding: 24px; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); background: #eef0f3; border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
+body.projects-page .card { width: 100%; height: auto; min-height: 280px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; transition: border-color 160ms ease-out; }
+body.projects-page .card:hover { transform: none; box-shadow: none; border-color: #9aa9bd; }
+body.projects-page .card.new { background: #f7f9fc; border-style: dashed; }
+body.projects-page .card h3 { font-weight: 500; }
+body .empty-state { background: #fff; border: 1px dashed var(--line-strong); border-radius: 12px; padding: 24px; }
+:where(a, button, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 1100px) {
+  body .app-header { flex-direction: column; gap: 16px; }
+  body .app-header .page-actions { justify-content: flex-start; }
+  body.graph-page { height: auto; overflow: auto; }
+  body.graph-page .graph-layout { grid-template-columns: minmax(0, 1fr); }
+  body.graph-page .graph-sidebar { overflow: visible; }
+  body.graph-page .prediction-table-shell { max-height: 320px; }
+  body.graph-page .chart-frame-large, body.graph-page .chart-frame-large canvas { min-height: 380px; height: 380px; }
+}
+@media (max-width: 768px) {
+  body.graph-page .graph-shell, body.graph-page .graph-board, body.graph-page .graph-sidebar, body.graph-page .graph-main-panel { grid-template-columns: minmax(0, 1fr); }
+  body .page-shell, body .workspace-board, body .graph-layout, body .graph-sidebar, body .graph-main-panel, body .dss-layout, body .panel { min-width: 0; max-width: 100%; }
+  body .graph-sidebar-actions, body .range-control, body .chart-toolbar-copy { min-width: 0; }
+  body .table-shell { overflow-x: auto; }
+  body.training-page, body.graph-page { padding: 0 16px 16px; }
+  body .app-header .page-actions { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding: 4px; }
+  body .app-header .page-actions .button { width: auto; flex: 0 0 auto; }
+  body .workspace-board, body .training-panel-compact, body .graph-sidebar, body .graph-main-panel { padding: 16px; }
+  body.projects-page .container { padding: 16px; gap: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
